@@ -29,7 +29,7 @@ def _build_prompt(question: str, docs: list[dict], history: list[dict], memories
     recent = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in history)
     past = "\n\n".join(memories)
     return (
-        f"LONG-TERM MEMORY (related exchanges from earlier chats):\n{past or '(none)'}\n\n"
+        f"LONG-TERM MEMORY (related earlier exchanges):\n{past or '(none)'}\n\n"
         f"DOCUMENT CONTEXT:\n{context or '(no documents uploaded)'}\n\n"
         f"RECENT CONVERSATION:\n{recent or '(new chat)'}\n\n"
         f"USER QUESTION:\n{question}"
@@ -58,7 +58,9 @@ def chat(body: ChatIn, user: dict = Depends(get_current_user)):
         # One embedding of the question serves both searches
         query_vector = llm.embed_query(body.message)
         docs = vector_store.search_documents(user_id, query_vector)
-        memories = vector_store.recall(user_id, session_id or "", query_vector)
+        # Each exchange is stored under the id of its assistant message
+        in_history = {str(m["_id"]) for m in history if m["role"] == "assistant"}
+        memories = vector_store.recall(user_id, query_vector, in_history)
         answer = llm.generate(_build_prompt(body.message, docs, history, memories))
     except llm.LLMError as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
@@ -107,6 +109,8 @@ def delete_session(session_id: str, user: dict = Depends(get_current_user)):
     _own_session(session_id, user["id"])
     messages.delete_many({"session_id": session_id})
     sessions.delete_one({"_id": ObjectId(session_id)})
+    # A chat the user deletes is forgotten for good (one that merely expires stays in long-term memory)
+    vector_store.forget_session(user["id"], session_id)
 
 
 @router.get("/memory")
@@ -115,8 +119,3 @@ def memory_stats(user: dict = Depends(get_current_user)):
         "long_term_items": vector_store.memory_count(user["id"]),
         "short_term_ttl_hours": settings.SHORT_TERM_TTL_HOURS,
     }
-
-
-@router.delete("/memory", status_code=status.HTTP_204_NO_CONTENT)
-def clear_memory(user: dict = Depends(get_current_user)):
-    vector_store.forget_all(user["id"])

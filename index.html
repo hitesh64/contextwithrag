@@ -326,15 +326,12 @@
   .menu-toggle i { width: 18px; text-align: center; font-size: .85rem; }
   .side-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: 12px; }
   .nav-title { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: .58rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-mute); padding: 14px 20px 5px; }
-  .nav-title button { color: var(--brand); font-size: .68rem; font-weight: 600; letter-spacing: 0; text-transform: none; padding: 0 2px; border-radius: var(--r-sm); }
-  .nav-title button:hover { text-decoration: underline; }
   .nav-title .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
   .nav-item { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 20px; font-size: .8rem; font-weight: 500; color: var(--ink-soft); border-left: 2px solid transparent; text-align: left; cursor: pointer;
     transition: background .18s ease, color .18s ease; }
   .nav-item > i { width: 18px; flex: none; text-align: center; font-size: .85rem; }
   .nav-item:hover { color: var(--ink); background: var(--bg-tertiary); }
   .nav-item.active { color: var(--brand); background: var(--brand-light); border-radius: 6px; margin: 2px 10px; width: auto; padding: 7px 9px; border-left: 3px solid var(--brand); }
-  .nav-item.static { cursor: default; }
   .nav-item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .nav-item .icon-btn { opacity: 0; flex: none; }
   .nav-item:hover .icon-btn, .nav-item .icon-btn:focus-visible { opacity: 1; }
@@ -476,7 +473,6 @@
     .file-item { padding-top: 9px; padding-bottom: 9px; }
     .dropzone { padding: 16px 10px; }
     .nav-title { font-size: .72rem; }
-    .nav-title button { font-size: .82rem; padding: 4px 6px; }
     .who span { font-size: .78rem; }
     .hdr-field { height: 40px; }
     .kbd { display: none; }
@@ -667,9 +663,6 @@
 
         <div class="nav-title"><span>Recent chats <span class="note" id="ttlNote"></span></span></div>
         <div id="sessionList"></div>
-
-        <div class="nav-title"><span>Long-term memory</span><button id="clearMemoryBtn" type="button">Clear</button></div>
-        <div class="nav-item static" id="memoryItem" data-tip="Long-term memory"><i class="fa-solid fa-brain"></i><span class="lbl name" id="memoryInfo"></span></div>
       </div>
       <div class="side-foot">
         <div class="avatar" id="avatar"></div>
@@ -1075,7 +1068,7 @@ const KPIS = [
   { key: 'chats', tone: 'purple', icon: 'fa-comments', label: 'Recent chats', sub: () => (state.stats.ttl ? `kept ${state.stats.ttl}h` : 'Short-term memory'),
     action: () => $('search').focus() },
   { key: 'memory', tone: 'teal', icon: 'fa-brain', label: 'Remembered exchanges', sub: () => 'Long-term memory (ChromaDB)',
-    action: () => { if (matchMedia('(max-width: 980px)').matches) $('app').classList.add('menu-open'); else setRail(false); $('memoryItem').scrollIntoView({ block: 'nearest' }); } },
+    action: () => $('prompt').focus() },
 ];
 
 function updateStats() {
@@ -1286,7 +1279,7 @@ async function deleteSession(id) {
   try {
     await api(`/api/sessions/${id}`, { method: 'DELETE' });
     if (state.sessionId === id) newChat();
-    loadSessions();
+    loadSessions(); loadMemory();
   } catch (err) { toast(err.message, true); }
 }
 
@@ -1294,20 +1287,12 @@ async function deleteSession(id) {
 async function loadMemory() {
   try {
     const m = await api('/api/memory');
-    $('memoryInfo').textContent = `${m.long_term_items} remembered exchange${m.long_term_items === 1 ? '' : 's'} (ChromaDB)`;
-    $('memoryItem').dataset.tip = $('memoryInfo').textContent;
     $('ttlNote').textContent = `· kept ${m.short_term_ttl_hours}h`;
     state.stats.memory = m.long_term_items;
     state.stats.ttl = m.short_term_ttl_hours;
     updateStats();
   } catch { /* shown elsewhere */ }
 }
-
-$('clearMemoryBtn').onclick = async () => {
-  if (!await confirmDialog('Erase everything the assistant remembers from your past chats?', { ok: 'Clear', tone: 'warn' })) return;
-  try { await api('/api/memory', { method: 'DELETE' }); toast('Long-term memory cleared.'); loadMemory(); }
-  catch (err) { toast(err.message, true); }
-};
 
 // ---------- files (knowledge base, ChromaDB) ----------
 async function loadFiles() {

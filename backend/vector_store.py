@@ -106,21 +106,26 @@ def remember(user_id: str, session_id: str, message_id: str, question: str, answ
     )
 
 
-def recall(user_id: str, session_id: str, query_vector: list[float], k: int = 3) -> list[str]:
-    """Related exchanges from the user's OTHER chats (the current chat is covered by short-term memory)."""
+def recall(user_id: str, query_vector: list[float], skip_ids: set[str], k: int = 3) -> list[str]:
+    """Related past exchanges of the user, from any chat.
+
+    skip_ids: exchanges already sent to the model as short-term memory. Older turns of the
+    current chat are not skipped, so a long chat can still recall its own beginning.
+    """
     res = _memory().query(
         query_embeddings=[query_vector],
-        n_results=k,
-        where={"$and": [{"user_id": user_id}, {"session_id": {"$ne": session_id}}]},
+        n_results=k + len(skip_ids),
+        where={"user_id": user_id},
     )
-    return [
-        doc for doc, dist in zip(res["documents"][0], res["distances"][0])
-        if dist <= MEMORY_MAX_DISTANCE
+    related = [
+        doc for id_, doc, dist in zip(res["ids"][0], res["documents"][0], res["distances"][0])
+        if id_ not in skip_ids and dist <= MEMORY_MAX_DISTANCE
     ]
+    return related[:k]
 
 
-def forget_all(user_id: str) -> None:
-    _memory().delete(where={"user_id": user_id})
+def forget_session(user_id: str, session_id: str) -> None:
+    _memory().delete(where={"$and": [{"user_id": user_id}, {"session_id": session_id}]})
 
 
 def memory_count(user_id: str) -> int:
