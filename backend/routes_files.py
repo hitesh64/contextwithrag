@@ -78,8 +78,17 @@ def _index_one(upload: UploadFile, user_id: str) -> dict:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def upload_file(upload: UploadFile = File(...), user: dict = Depends(get_current_user)):
+def upload_file(
+    upload: UploadFile | None = File(None),
+    uploads: list[UploadFile] | None = File(None),
+    user: dict = Depends(get_current_user),
+):
     """One file per request: indexing is memory- and CPU-heavy, so files are handled one at a time."""
+    # "uploads" is the field name used by pages loaded before single-file upload; accept it for one file
+    if upload is None and uploads and len(uploads) == 1:
+        upload = uploads[0]
+    if upload is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Upload one file at a time.")
     try:
         return _file_out(_index_one(upload, user["id"]))
     except ValueError as e:
