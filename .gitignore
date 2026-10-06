@@ -1,0 +1,25 @@
+# Secrets (API key, database password) - never commit
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local data (ChromaDB vectors and the downloaded embedding model)
+chroma_data/
+
+# Tools and editors
+.claude/
+.vercel/
+.vscode/
+.idea/
+
+# OS and logs
+*.log
+Thumbs.db
+.DS_Store

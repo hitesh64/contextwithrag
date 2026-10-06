@@ -1,0 +1,7 @@
+.venv
+chroma_data
+.claude
+__pycache__
+img/*.png
+*.pdf
+view_chroma.py
