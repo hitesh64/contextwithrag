@@ -10,7 +10,7 @@ from .security import create_access_token, get_current_user, hash_password, revo
 router = APIRouter(prefix="/api", tags=["auth"])
 
 
-@router.post("/auth/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
+@router.post("/auth/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def register(body: RegisterIn):
     email = body.email.lower()
     if users.find_one({"email": email}):
@@ -29,7 +29,8 @@ def register(body: RegisterIn):
         user["_id"] = users.insert_one(user).inserted_id
     except DuplicateKeyError:
         raise HTTPException(status.HTTP_409_CONFLICT, "Email or username already in use")
-    return TokenOut(access_token=create_access_token(str(user["_id"])), user=user_out(user))
+    # No token here: the new user signs in on the login form
+    return user_out(user)
 
 
 @router.post("/auth/login", response_model=TokenOut)

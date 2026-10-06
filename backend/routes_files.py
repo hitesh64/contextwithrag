@@ -52,8 +52,13 @@ def _index_one(upload: UploadFile, user_id: str) -> dict:
         raise ValueError("no readable text found (scanned PDFs without a text layer are not supported)")
 
     chunks = split_documents(docs, ext)
+    if len(chunks) > settings.MAX_FILE_CHUNKS:
+        raise ValueError(
+            f"too much text to index ({len(chunks)} sections, the limit is {settings.MAX_FILE_CHUNKS}). "
+            "Split the file into smaller parts."
+        )
+
     file_id = ObjectId()
-    vector_store.add_document_chunks(user_id, str(file_id), filename, chunks)
     doc = {
         "_id": file_id,
         "user_id": user_id,
@@ -62,27 +67,31 @@ def _index_one(upload: UploadFile, user_id: str) -> dict:
         "size": len(data),
         "uploaded_at": datetime.now(timezone.utc),
     }
-    files.insert_one(doc)
+    try:
+        vector_store.add_document_chunks(user_id, str(file_id), filename, chunks)
+        files.insert_one(doc)
+    except Exception:
+        # Never leave half a file behind
+        vector_store.delete_document(user_id, str(file_id))
+        raise
     return doc
 
 
-@router.post("")
-def upload_files(uploads: list[UploadFile] = File(...), user: dict = Depends(get_current_user)):
-    indexed, skipped = [], []
-    for upload in uploads:
-        try:
-            indexed.append(_file_out(_index_one(upload, user["id"])))
-        except ValueError as e:
-            skipped.append({"filename": upload.filename, "reason": str(e)})
-    if not indexed:
-        reasons = "; ".join(f"{s['filename']}: {s['reason']}" for s in skipped)
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"No files could be indexed. {reasons}")
-    return {"indexed": indexed, "skipped": skipped}
+@router.post("", status_code=status.HTTP_201_CREATED)
+def upload_file(upload: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """One file per request: indexing is memory- and CPU-heavy, so files are handled one at a time."""
+    try:
+        return _file_out(_index_one(upload, user["id"]))
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{upload.filename}: {e}")
 
 
 @router.get("")
 def list_files(user: dict = Depends(get_current_user)):
-    return [_file_out(d) for d in files.find({"user_id": user["id"]}).sort("uploaded_at", -1)]
+    # Only files whose chunks are really in the vector store can be searched, so only those are listed
+    indexed = vector_store.indexed_file_ids(user["id"])
+    cursor = files.find({"user_id": user["id"]}).sort("uploaded_at", -1)
+    return [_file_out(d) for d in cursor if str(d["_id"]) in indexed]
 
 
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)

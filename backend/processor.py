@@ -6,8 +6,8 @@ for source code) instead of at a fixed character count.
 """
 import re
 
+import pymupdf
 from docx import Document as DocxDocument
-from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_core.documents import Document
 from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
 from pptx import Presentation
@@ -51,11 +51,11 @@ def _table_rows(table) -> list[str]:
 def load_documents(file_path: str, ext: str) -> list[Document]:
     """One Document per PDF page / slide (with its number in metadata), or one for the whole file."""
     if ext == "pdf":
-        pages = PyMuPDFLoader(file_path).load()
-        return [
-            Document(page_content=_clean(p.page_content), metadata={"page": p.metadata.get("page", i) + 1})
-            for i, p in enumerate(pages)
-        ]
+        with pymupdf.open(file_path) as pdf:
+            return [
+                Document(page_content=_clean(page.get_text()), metadata={"page": number})
+                for number, page in enumerate(pdf, start=1)
+            ]
 
     if ext == "docx":
         doc = DocxDocument(file_path)

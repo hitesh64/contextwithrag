@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>CONTEXTWITHRAG</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -161,7 +161,7 @@
   .pw-toggle { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); color: var(--ink-mute); font-size: 14px; padding: 7px 8px; border-radius: var(--r-md); }
   .pw-toggle:hover { background: var(--bg-tertiary); color: var(--indigo); }
   .pw-meter { overflow: hidden; max-height: 0; opacity: 0; transition: max-height .35s ease, opacity .3s; }
-  .pw-meter.show { max-height: 170px; opacity: 1; }
+  .pw-meter.show { max-height: 240px; opacity: 1; }
   .strength { height: 5px; border-radius: 99px; background: var(--bg-tertiary); overflow: hidden; margin-top: 10px; }
   .strength i { display: block; height: 100%; width: 0; border-radius: 99px; transition: width .35s ease, background .35s; }
   .strength-label { font-size: 12px; margin-top: 6px; min-height: 16px; color: var(--ink-soft); }
@@ -172,6 +172,7 @@
   .criteria li.ok::before { content: "✓"; color: #fff; background: var(--green); border-color: var(--green); animation: pop .35s cubic-bezier(.3,1.6,.5,1); }
   @keyframes pop { from { transform: scale(.3); } }
   .form-error { color: var(--red); font-size: 13px; min-height: 18px; margin-bottom: 10px; }
+  .form-error.ok { color: #15803d; font-weight: 600; }
   .auth-actions { display: flex; gap: 10px; }
   .auth-actions .btn-primary { flex: 1; }
   .auth-foot { text-align: center; font-size: 12px; color: var(--ink-mute); margin-top: 22px; }
@@ -203,10 +204,21 @@
     .auth-card, .auth-card.register { padding: 28px 20px 22px; }
     .auth-card.register .fields { grid-template-columns: 1fr; }
     .auth-card.register .criteria { grid-template-columns: 1fr 1fr; }
+    .auth-card.register .field small { white-space: normal; }
+    .login { padding: 12px; }
+    .brand { font-size: clamp(19px, 6.4vw, 26px); }
+    .auth-actions .btn { min-height: 44px; }
+    .tabs button { padding: 11px 8px; }
+  }
+  @media (max-width: 400px) {
+    .auth-card, .auth-card.register { padding: 24px 16px 20px; }
+    .steps { gap: 5px; font-size: 10px; }
+    .step { gap: 5px; }
+    .step-line { width: 12px; }
   }
 
   /* ================= APP SHELL ================= */
-  .app { zoom: var(--app-zoom); width: calc(100vw / var(--app-zoom)); height: calc(100vh / var(--app-zoom)); display: flex; flex-direction: column; overflow: hidden; }
+  .app { zoom: var(--app-zoom); width: calc(100vw / var(--app-zoom)); height: calc(100vh / var(--app-zoom)); height: calc(100dvh / var(--app-zoom)); display: flex; flex-direction: column; overflow: hidden; }
   .shell { flex: 1; min-height: 0; display: flex; padding-top: var(--hdr-h); }
   .main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
   .content-area { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 24px 24px 0; display: flex; flex-direction: column; }
@@ -334,6 +346,7 @@
   .empty { color: var(--ink-mute); font-size: .74rem; padding: 4px 20px; }
   .dropzone { margin: 6px 14px 8px; border: 1.5px dashed #cbd5e1; border-radius: 10px; padding: 12px 8px; text-align: center; color: var(--ink-soft); font-size: .74rem; cursor: pointer; background: #fff; transition: border-color .18s ease, color .18s ease, background .18s ease; }
   .dropzone small { color: var(--ink-mute); }
+  .dropzone.busy { pointer-events: none; overflow-wrap: anywhere; color: var(--brand); border-color: var(--brand); }
   .dropzone:hover, .dropzone.drag { border-color: var(--brand); color: var(--brand); background: var(--brand-light); }
   .side-foot { border-top: 1px solid var(--line-soft); padding: 12px 14px; display: flex; align-items: center; gap: 10px; }
   .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 1.1rem; flex: none; }
@@ -420,7 +433,7 @@
   .confirm-text { overflow-y: auto; min-height: 0; font-size: 13.5px; color: var(--ink-soft); overflow-wrap: anywhere; }
   .confirm-actions { display: flex; gap: 10px; justify-content: center; margin-top: 20px; flex: none; }
   .confirm-actions .btn { font-size: 13px; padding: 9px 18px; min-width: 110px; }
-  #toasts { position: fixed; right: 16px; top: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 9999; }
+  #toasts { position: fixed; right: 16px; top: 16px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 8px; z-index: 9999; }
   .toast { display: flex; align-items: flex-start; gap: 9px; background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--green); padding: 11px 14px; border-radius: 10px; box-shadow: var(--shadow-lg); max-width: 380px; font-size: 13px; overflow-wrap: anywhere; animation: toastIn .32s var(--spring) both; }
   .toast i { color: var(--green); font-size: 15px; margin-top: 2px; flex: none; }
   .toast.error { border-left-color: var(--red); }
@@ -456,6 +469,38 @@
     .app.menu-open .backdrop { display: block; position: fixed; inset: 0; z-index: 65; background: rgba(15,23,42,.45); }
     .content-area { padding: 16px 14px 0; }
     .msg { max-width: 100%; }
+    /* phones and tablets: the desktop type scale is too small to read, so scale everything up */
+    html { font-size: 14px; }
+    .side-top { padding-top: max(10px, env(safe-area-inset-top)); }
+    .nav-item, .nav-item.active { padding-top: 11px; padding-bottom: 11px; }
+    .file-item { padding-top: 9px; padding-bottom: 9px; }
+    .dropzone { padding: 16px 10px; }
+    .nav-title { font-size: .72rem; }
+    .nav-title button { font-size: .82rem; padding: 4px 6px; }
+    .who span { font-size: .78rem; }
+    .hdr-field { height: 40px; }
+    .kbd { display: none; }
+    /* 16px fields stop mobile browsers from zooming the page when a field is focused */
+    .search input, .composer textarea, .login input { font-size: 16px; }
+    .chip-value { font-size: 14px; }
+    .composer { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+    .composer .btn { height: 42px; }
+    .msg pre { font-size: .85em; }
+    #toasts { left: 16px; }
+    .toast { max-width: none; }
+    .confirm-actions .btn { flex: 1; min-width: 0; }
+  }
+  /* touch screens have no hover, so the delete buttons must always be visible */
+  @media (hover: none) {
+    .nav-item .icon-btn { opacity: 1; }
+    .icon-btn { padding: 8px 10px; }
+  }
+  /* phones held sideways: keep the header to one short row so the chat has room */
+  @media (max-width: 980px) and (max-height: 520px) {
+    .hdr { flex-wrap: nowrap; }
+    .hdr-sub, .chip-btn { display: none; }
+    .hdr-controls { flex: 1 1 0; }
+    .welcome-body { padding: 16px; }
   }
   @media (max-width: 640px) {
     .kpi-grid { grid-template-columns: 1fr; }
@@ -611,12 +656,12 @@
       <div class="side-scroll">
         <div class="nav-title"><span>Main</span></div>
         <button class="nav-item" id="newChatBtn" type="button" data-tip="New chat"><i class="fa-solid fa-plus"></i><span class="lbl">New chat</span></button>
-        <button class="nav-item" id="uploadBtn" type="button" data-tip="Upload files"><i class="fa-solid fa-cloud-arrow-up"></i><span class="lbl">Upload files</span><span class="nav-badge hidden" id="fileCount"></span></button>
+        <button class="nav-item" id="uploadBtn" type="button" data-tip="Upload a file"><i class="fa-solid fa-cloud-arrow-up"></i><span class="lbl">Upload a file</span><span class="nav-badge hidden" id="fileCount"></span></button>
 
         <div class="nav-title"><span>Knowledge base</span></div>
         <div class="rail-hide">
-          <div class="dropzone" id="dropzone">Click or drop files here<br><small>Code, PDF, DOCX, PPTX · max <span id="maxMb">5</span> MB each</small></div>
-          <input type="file" id="fileInput" multiple class="hidden">
+          <div class="dropzone" id="dropzone">Click or drop a file here<br><small>Code, PDF, DOCX, PPTX · one file at a time · max <span id="maxMb">5</span> MB</small></div>
+          <input type="file" id="fileInput" class="hidden">
           <div id="fileList"></div>
         </div>
 
@@ -662,7 +707,7 @@ const TOKEN_KEY = 'nexus_token';
 const RAIL_KEY = 'nexus_rail';
 const $ = (id) => document.getElementById(id);
 const state = { token: localStorage.getItem(TOKEN_KEY), user: null, sessionId: null, mode: 'login', busy: false,
-  stats: { files: '–', chats: '–', memory: '–', ttl: null }, maxUploadMb: 5, authStep: 1, enterTimer: null };
+  stats: { files: '–', chats: '–', memory: '–', ttl: null }, maxUploadMb: 5, uploading: false, authStep: 1, enterTimer: null };
 
 // ---------- helpers ----------
 function el(tag, props = {}, ...children) {
@@ -735,7 +780,8 @@ async function api(path, { method = 'GET', json, body } = {}) {
     showAuth();
     throw new Error('Session expired. Please log in again.');
   }
-  if (!res.ok) throw new Error(errorText(data) || `Request failed (${res.status})`);
+  if (!res.ok) throw new Error(errorText(data) || ([502, 503, 504].includes(res.status)
+    ? 'The server is busy or restarting. Please try again in a moment.' : `Request failed (${res.status})`));
   return data;
 }
 
@@ -760,6 +806,7 @@ function setMode(mode) {
   $('password').autocomplete = reg ? 'new-password' : 'current-password';
   $('authSubmitLabel').textContent = reg ? 'Create account' : 'Sign In';
   $('authError').textContent = '';
+  $('authError').classList.remove('ok');
   updatePasswordMeter();
   syncAuthCard();
   if (state.authStep === 2) setAuthStep(2);
@@ -928,6 +975,7 @@ $('pwToggle').onclick = () => {
 
 function authError(text) {
   $('authError').textContent = text;
+  $('authError').classList.remove('ok');
   const card = document.querySelector('.auth-card');
   card.classList.remove('shake');
   void card.offsetWidth; // restart the animation
@@ -960,10 +1008,21 @@ $('authForm').onsubmit = async (e) => {
 
   $('authSubmit').disabled = true;
   $('authError').textContent = '';
+  $('authError').classList.remove('ok');
   try {
-    const data = state.mode === 'register'
-      ? await api('/api/auth/register', { method: 'POST', json: { username, email, password } })
-      : await api('/api/auth/login', { method: 'POST', json: { username, password } });
+    if (state.mode === 'register') {
+      // Registering does not sign the user in: they continue on the login form
+      const user = await api('/api/auth/register', { method: 'POST', json: { username, email, password } });
+      $('authForm').reset();
+      setMode('login');
+      $('username').value = user.username;
+      $('authError').textContent = 'Account created. Sign in to continue.';
+      $('authError').classList.add('ok');
+      $('password').focus();
+      toast('Account created. Please sign in.');
+      return;
+    }
+    const data = await api('/api/auth/login', { method: 'POST', json: { username, password } });
     state.token = data.access_token;
     localStorage.setItem(TOKEN_KEY, state.token);
     finishAuth(data.user);
@@ -1269,33 +1328,38 @@ async function loadFiles() {
   } catch (err) { if (state.token) toast(err.message, true); }
 }
 
-async function uploadFiles(fileList) {
-  // Oversized files are rejected here with a toast; the server enforces the same limit
-  const limit = state.maxUploadMb * 1024 * 1024;
-  const files = [...fileList].filter((f) => {
-    if (f.size <= limit) return true;
-    toast(`"${f.name}" is ${(f.size / 1048576).toFixed(1)} MB. Maximum file size is ${state.maxUploadMb} MB.`, true);
-    return false;
-  });
+// One file per upload: indexing is heavy for the server, so files are sent one at a time
+async function uploadFile(fileList) {
+  const picked = [...fileList];
   $('fileInput').value = '';
-  if (!files.length) return;
+  if (!picked.length) return;
+  if (state.uploading) { toast('Please wait, a file is still being indexed.', true); return; }
+  if (picked.length > 1) { toast('Upload one file at a time. Choose a single file.', true); return; }
+  const file = picked[0];
+  // The server enforces the same limit
+  if (file.size > state.maxUploadMb * 1024 * 1024) {
+    toast(`"${file.name}" is ${(file.size / 1048576).toFixed(1)} MB. Maximum file size is ${state.maxUploadMb} MB.`, true);
+    return;
+  }
   const form = new FormData();
-  files.forEach((f) => form.append('uploads', f));
+  form.append('upload', file);
   const zone = $('dropzone');
   const original = zone.innerHTML;
-  zone.textContent = `Indexing ${files.length} file${files.length === 1 ? '' : 's'}…`;
-  zone.style.pointerEvents = 'none';
+  state.uploading = true;
+  zone.replaceChildren(icon('fa-spinner fa-spin'), ` Indexing ${file.name}…`);
+  zone.classList.add('busy');
+  $('uploadBtn').disabled = true;
   try {
     const res = await api('/api/files', { method: 'POST', body: form });
-    toast(`Indexed ${res.indexed.length} file${res.indexed.length === 1 ? '' : 's'}.`);
-    res.skipped.forEach((s) => toast(`Skipped ${s.filename}: ${s.reason}`, true));
+    toast(`Indexed "${res.filename}" (${res.chunks} chunk${res.chunks === 1 ? '' : 's'}).`);
     loadFiles();
   } catch (err) {
     toast(err.message, true);
   } finally {
+    state.uploading = false;
     zone.innerHTML = original;
-    zone.style.pointerEvents = '';
-    $('fileInput').value = '';
+    zone.classList.remove('busy');
+    $('uploadBtn').disabled = false;
   }
 }
 
@@ -1307,10 +1371,10 @@ async function deleteFile(id, name) {
 
 $('dropzone').onclick = () => $('fileInput').click();
 $('uploadBtn').onclick = () => $('fileInput').click();
-$('fileInput').onchange = (e) => uploadFiles(e.target.files);
+$('fileInput').onchange = (e) => uploadFile(e.target.files);
 $('dropzone').ondragover = (e) => { e.preventDefault(); $('dropzone').classList.add('drag'); };
 $('dropzone').ondragleave = () => $('dropzone').classList.remove('drag');
-$('dropzone').ondrop = (e) => { e.preventDefault(); $('dropzone').classList.remove('drag'); uploadFiles(e.dataTransfer.files); };
+$('dropzone').ondrop = (e) => { e.preventDefault(); $('dropzone').classList.remove('drag'); uploadFile(e.dataTransfer.files); };
 
 // ---------- boot ----------
 (async function boot() {

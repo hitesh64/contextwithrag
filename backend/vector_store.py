@@ -12,7 +12,9 @@ import chromadb
 
 from .config import settings
 
-BATCH = 100
+# Chunks embedded per call. The local ONNX model's memory grows with the batch size: 100 at a time
+# peaks near 900 MB and gets the server killed on a 512 MB host, 4 at a time stays under 400 MB.
+BATCH = 4
 # Cosine distance above which a remembered conversation is considered unrelated
 MEMORY_MAX_DISTANCE = 0.75
 
@@ -55,6 +57,12 @@ def search_documents(user_id: str, query: str, k: int = 8) -> list[dict]:
         {"text": doc, "source": meta.get("source", "Unknown"), "page": meta.get("page")}
         for doc, meta in zip(res["documents"][0], res["metadatas"][0])
     ]
+
+
+def indexed_file_ids(user_id: str) -> set[str]:
+    """Files that really have chunks here (the store is wiped when a host without a disk restarts)."""
+    metas = _documents().get(where={"user_id": user_id}, include=["metadatas"])["metadatas"]
+    return {m["file_id"] for m in metas}
 
 
 def delete_document(user_id: str, file_id: str) -> None:

@@ -24,6 +24,8 @@ class Settings:
     CHROMA_DIR = BASE_DIR / os.getenv("CHROMA_DIR", "chroma_data")
 
     MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "5"))
+    # Largest file (in chunks of ~1200 characters) that is indexed; keeps embedding time and memory bounded
+    MAX_FILE_CHUNKS = int(os.getenv("MAX_FILE_CHUNKS", "400"))
     INDEX_FILE = BASE_DIR / "index.html"
     IMG_DIR = BASE_DIR / "img"
 
