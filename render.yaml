@@ -1,0 +1,42 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# Dashboard -> New -> Blueprint -> pick this repository. Render asks for the two secret values below.
+services:
+  - type: web
+    name: contextwithrag
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.4
+      # Secrets: typed into the Render dashboard, never stored in git
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: MONGO_DB
+        value: nexus_ai
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: LOGIN_EXPIRE_MINUTES
+        value: 720
+      - key: SHORT_TERM_TTL_HOURS
+        value: 24
+      - key: SHORT_TERM_TURNS
+        value: 10
+      - key: MAX_UPLOAD_MB
+        value: 5
+      - key: CHROMA_DIR
+        value: chroma_data
+
+    # The free plan has no permanent disk: uploaded-file chunks and long-term memory (ChromaDB)
+    # are erased whenever the service restarts or redeploys. To keep them, switch to a paid plan
+    # (plan: starter), uncomment the disk below and set CHROMA_DIR to /var/data/chroma_data.
+    # disk:
+    #   name: chroma-data
+    #   mountPath: /var/data
+    #   sizeGB: 1
