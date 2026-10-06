@@ -12,9 +12,11 @@ from collections import Counter
 
 import chromadb
 
+from backend import llm
 from backend.config import settings
+from backend.vector_store import COLLECTIONS as NAMES
 
-COLLECTIONS = {"docs": "documents", "memory": "long_term_memory"}
+COLLECTIONS = {"docs": NAMES["documents"], "memory": NAMES["long_term_memory"]}
 
 
 def show(text: str, width: int = 300) -> str:
@@ -27,7 +29,7 @@ def summary(client) -> None:
     for col in client.list_collections():
         metas = col.get(include=["metadatas"])["metadatas"]
         print(f"[{col.name}]  {len(metas)} items")
-        if col.name == "documents":
+        if col.name.startswith("documents"):
             for (user, source), n in sorted(Counter((m["user_id"], m["source"]) for m in metas).items()):
                 print(f"    user {user}  {source}: {n} chunks")
         else:
@@ -44,7 +46,7 @@ def rows(client, name: str, limit: int) -> None:
 
 
 def search(client, query: str, limit: int) -> None:
-    res = client.get_collection("documents").query(query_texts=[query], n_results=limit)
+    res = client.get_collection(COLLECTIONS["docs"]).query(query_embeddings=[llm.embed_query(query)], n_results=limit)
     for doc, meta, dist in zip(res["documents"][0], res["metadatas"][0], res["distances"][0]):
         page = f", page {meta['page']}" if meta.get("page") else ""
         print(f"distance {dist:.3f}  {meta['source']}{page}\n{show(doc)}\n")

@@ -4,19 +4,23 @@ Two persistent collections, both filtered per user:
   - documents         : chunks of the user's uploaded files (knowledge base)
   - long_term_memory  : past question/answer pairs, recalled semantically in later chats
 
-Embeddings use Chroma's built-in all-MiniLM-L6-v2 (ONNX) model, which runs locally.
+Embeddings come from the Gemini API (llm.embed). Running an embedding model inside the server
+was too slow and too memory-hungry for a small host: a 24-chunk PDF took the best part of a
+minute there and about 2 seconds through the API.
 """
 import threading
 
 import chromadb
 
+from . import llm
 from .config import settings
 
-# Chunks embedded per call. The local ONNX model's memory grows with the batch size: 100 at a time
-# peaks near 900 MB and gets the server killed on a 512 MB host, 4 at a time stays under 400 MB.
-BATCH = 4
+BATCH = 100
 # Cosine distance above which a remembered conversation is considered unrelated
-MEMORY_MAX_DISTANCE = 0.75
+# (with Gemini embeddings related exchanges score about 0.2, unrelated ones 0.4 and more)
+MEMORY_MAX_DISTANCE = 0.33
+# Collection names carry the embedding they were built with; vectors of different models cannot be mixed
+COLLECTIONS = {"documents": "documents_gemini", "long_term_memory": "long_term_memory_gemini"}
 
 
 _lock = threading.Lock()
@@ -33,8 +37,11 @@ def init() -> None:
     with _lock:
         if not _collections:
             client = chromadb.PersistentClient(path=str(settings.CHROMA_DIR))
-            for name in ("documents", "long_term_memory"):
-                _collections[name] = client.get_or_create_collection(name, metadata={"hnsw:space": "cosine"})
+            for key, name in COLLECTIONS.items():
+                # embedding_function=None: vectors are always supplied, Chroma never loads its own model
+                _collections[key] = client.get_or_create_collection(
+                    name, metadata={"hnsw:space": "cosine"}, embedding_function=None
+                )
 
 
 def _collection(name: str):
@@ -57,17 +64,20 @@ def add_document_chunks(user_id: str, file_id: str, source: str, chunks: list[di
     """chunks: {"text", "page"} as produced by processor.split_documents (page may be None)."""
     col = _documents()
     base = {"user_id": user_id, "file_id": file_id, "source": source}
+    # Embed everything first, so a failed embedding leaves nothing half-stored
+    vectors = llm.embed([c["text"] for c in chunks], "RETRIEVAL_DOCUMENT")
     for i in range(0, len(chunks), BATCH):
         batch = chunks[i:i + BATCH]
         col.add(
             ids=[f"{file_id}_{i + j}" for j in range(len(batch))],
+            embeddings=vectors[i:i + BATCH],
             documents=[c["text"] for c in batch],
             metadatas=[{**base, "page": c["page"]} if c["page"] else base for c in batch],
         )
 
 
-def search_documents(user_id: str, query: str, k: int = 8) -> list[dict]:
-    res = _documents().query(query_texts=[query], n_results=k, where={"user_id": user_id})
+def search_documents(user_id: str, query_vector: list[float], k: int = 8) -> list[dict]:
+    res = _documents().query(query_embeddings=[query_vector], n_results=k, where={"user_id": user_id})
     return [
         {"text": doc, "source": meta.get("source", "Unknown"), "page": meta.get("page")}
         for doc, meta in zip(res["documents"][0], res["metadatas"][0])
@@ -87,17 +97,19 @@ def delete_document(user_id: str, file_id: str) -> None:
 # ---------- conversation memory ----------
 
 def remember(user_id: str, session_id: str, message_id: str, question: str, answer: str, created_at: str) -> None:
+    text = f"User asked: {question}\nAssistant answered: {answer[:1500]}"
     _memory().add(
         ids=[message_id],
-        documents=[f"User asked: {question}\nAssistant answered: {answer[:1500]}"],
+        embeddings=llm.embed([text], "RETRIEVAL_DOCUMENT"),
+        documents=[text],
         metadatas=[{"user_id": user_id, "session_id": session_id, "created_at": created_at}],
     )
 
 
-def recall(user_id: str, session_id: str, query: str, k: int = 3) -> list[str]:
+def recall(user_id: str, session_id: str, query_vector: list[float], k: int = 3) -> list[str]:
     """Related exchanges from the user's OTHER chats (the current chat is covered by short-term memory)."""
     res = _memory().query(
-        query_texts=[query],
+        query_embeddings=[query_vector],
         n_results=k,
         where={"$and": [{"user_id": user_id}, {"session_id": {"$ne": session_id}}]},
     )

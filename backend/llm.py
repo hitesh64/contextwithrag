@@ -1,4 +1,4 @@
-"""Google Gemini client."""
+"""Google Gemini client: answers and embeddings."""
 import time
 from functools import lru_cache
 
@@ -56,6 +56,41 @@ def _generate(model: str, prompt: str) -> str:
     if not response.text:
         raise LLMError("The model returned an empty response (it may have been blocked by safety filters).")
     return response.text
+
+
+# Texts per embedding request, and the stored vector size
+EMBED_BATCH = 50
+EMBED_DIMENSIONS = 768
+# A free API key allows roughly 100 texts per minute; when that is used up, wait and continue
+EMBED_QUOTA_WAITS = (15, 25, 30)
+
+
+def _embed_batch(texts: list[str], task: str) -> list[list[float]]:
+    config = types.EmbedContentConfig(task_type=task, output_dimensionality=EMBED_DIMENSIONS)
+    for wait in (*EMBED_QUOTA_WAITS, None):
+        try:
+            result = _client().models.embed_content(model=settings.EMBEDDING_MODEL, contents=texts, config=config)
+            return [e.values for e in result.embeddings]
+        except errors.APIError as e:
+            if wait is None or e.code not in (429, 500, 503):
+                if e.code == 429:
+                    raise LLMError("The embedding quota of the Gemini API key is used up. Try again in a minute.") from e
+                raise LLMError(f"Gemini API error ({e.code}): {e.message}") from e
+            time.sleep(wait)
+
+
+def embed(texts: list[str], task: str) -> list[list[float]]:
+    """Vectors for texts. task: RETRIEVAL_DOCUMENT for stored text, RETRIEVAL_QUERY for a question."""
+    if not settings.GOOGLE_API_KEY:
+        raise LLMError("GOOGLE_API_KEY is not configured. Add it to the .env file and restart the server.")
+    vectors = []
+    for i in range(0, len(texts), EMBED_BATCH):
+        vectors.extend(_embed_batch(texts[i:i + EMBED_BATCH], task))
+    return vectors
+
+
+def embed_query(text: str) -> list[float]:
+    return embed([text], "RETRIEVAL_QUERY")[0]
 
 
 def generate(prompt: str) -> str:

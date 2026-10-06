@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
-from . import vector_store
+from . import llm, vector_store
 from .config import settings
 from .database import files
 from .processor import ALLOWED_EXTENSIONS, file_extension, load_documents, split_documents
@@ -93,6 +93,8 @@ def upload_file(
         return _file_out(_index_one(upload, user["id"]))
     except ValueError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{upload.filename}: {e}")
+    except llm.LLMError as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
 
 
 @router.get("")

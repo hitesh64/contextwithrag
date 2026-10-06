@@ -10,7 +10,7 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Local data (ChromaDB vectors and the downloaded embedding model)
+# Local data (ChromaDB vectors)
 chroma_data/
 
 # Tools and editors

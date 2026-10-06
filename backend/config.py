@@ -10,6 +10,7 @@ load_dotenv(BASE_DIR / ".env")
 class Settings:
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "").strip()
     GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "gemini-embedding-001").strip()
 
     # How long a login stays valid
     LOGIN_EXPIRE_MINUTES = int(os.getenv("LOGIN_EXPIRE_MINUTES", "720"))

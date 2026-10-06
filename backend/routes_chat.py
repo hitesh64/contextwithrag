@@ -54,10 +54,11 @@ def chat(body: ChatIn, user: dict = Depends(get_current_user)):
         )[::-1]
 
     # Long-term memory (ChromaDB): uploaded documents + related past conversations
-    docs = vector_store.search_documents(user_id, body.message)
-    memories = vector_store.recall(user_id, session_id or "", body.message)
-
     try:
+        # One embedding of the question serves both searches
+        query_vector = llm.embed_query(body.message)
+        docs = vector_store.search_documents(user_id, query_vector)
+        memories = vector_store.recall(user_id, session_id or "", query_vector)
         answer = llm.generate(_build_prompt(body.message, docs, history, memories))
     except llm.LLMError as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
@@ -80,7 +81,10 @@ def chat(body: ChatIn, user: dict = Depends(get_current_user)):
          "created_at": datetime.now(timezone.utc)}
     ).inserted_id
 
-    vector_store.remember(user_id, session_id, str(reply_id), body.message, answer, now.isoformat())
+    try:
+        vector_store.remember(user_id, session_id, str(reply_id), body.message, answer, now.isoformat())
+    except llm.LLMError:
+        pass  # the answer is saved; only this exchange is missing from long-term memory
 
     return ChatOut(session_id=session_id, answer=answer, sources=sources)
 
