@@ -1,4 +1,5 @@
 import mimetypes
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -19,6 +20,9 @@ async def lifespan(app: FastAPI):
     except PyMongoError as e:
         raise RuntimeError(f"Cannot connect to MongoDB at {settings.MONGO_URI}. Is it running?") from e
     vector_store.init()
+    vector_store.restore_memory()
+    # Embedding calls the Gemini API, which must not hold up the start of the server
+    threading.Thread(target=vector_store.backfill_memory, daemon=True).start()
     yield
 
 

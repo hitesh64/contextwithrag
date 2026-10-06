@@ -37,8 +37,9 @@ services:
       - key: CHROMA_DIR
         value: chroma_data
 
-    # The free plan has no permanent disk: uploaded-file chunks and long-term memory (ChromaDB)
-    # are erased whenever the service restarts or redeploys. To keep them, switch to a paid plan
+    # The free plan has no permanent disk: ChromaDB is erased whenever the service restarts or
+    # redeploys. Long-term memory is put back from MongoDB at startup; uploaded files are not and
+    # have to be uploaded again. To keep them too, switch to a paid plan
     # (plan: starter), uncomment the disk below and set CHROMA_DIR to /var/data/chroma_data.
     # disk:
     #   name: chroma-data

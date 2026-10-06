@@ -1,4 +1,4 @@
-"""MongoDB: users, uploaded-file metadata and SHORT-TERM chat memory."""
+"""MongoDB: users, uploaded-file metadata, SHORT-TERM chat memory and the lasting copy of long-term memory."""
 from pymongo import ASCENDING, DESCENDING, MongoClient
 from pymongo.errors import OperationFailure
 
@@ -12,6 +12,8 @@ files = db["files"]
 sessions = db["sessions"]
 messages = db["messages"]
 login_sessions = db["login_sessions"]
+# Every remembered exchange with its vector; ChromaDB is refilled from here (see vector_store)
+memories = db["memories"]
 
 
 def _ttl_index(coll, field, seconds):
@@ -33,6 +35,7 @@ def init_db():
     files.create_index([("user_id", ASCENDING), ("uploaded_at", DESCENDING)])
     sessions.create_index([("user_id", ASCENDING), ("updated_at", DESCENDING)])
     messages.create_index([("session_id", ASCENDING), ("created_at", ASCENDING)])
+    memories.create_index([("user_id", ASCENDING), ("session_id", ASCENDING)])
 
     # Short-term memory expires automatically
     ttl = settings.SHORT_TERM_TTL_HOURS * 3600

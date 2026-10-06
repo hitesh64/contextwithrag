@@ -86,7 +86,7 @@ def chat(body: ChatIn, user: dict = Depends(get_current_user)):
     try:
         vector_store.remember(user_id, session_id, str(reply_id), body.message, answer, now.isoformat())
     except llm.LLMError:
-        pass  # the answer is saved; only this exchange is missing from long-term memory
+        pass  # the answer is saved; the exchange is added to long-term memory at the next start
 
     return ChatOut(session_id=session_id, answer=answer, sources=sources)
 

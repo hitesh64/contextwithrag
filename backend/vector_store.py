@@ -7,6 +7,10 @@ Two persistent collections, both filtered per user:
 Embeddings come from the Gemini API (llm.embed). Running an embedding model inside the server
 was too slow and too memory-hungry for a small host: a 24-chunk PDF took the best part of a
 minute there and about 2 seconds through the API.
+
+A host without a permanent disk loses this folder on every restart. Remembered exchanges are
+therefore also kept in MongoDB (with their vectors) and put back at startup, and exchanges
+that were never stored are embedded again from the chats that still exist.
 """
 import threading
 
@@ -14,6 +18,7 @@ import chromadb
 
 from . import llm
 from .config import settings
+from .database import memories as saved_memories, messages
 
 BATCH = 100
 # Cosine distance above which a remembered conversation is considered unrelated
@@ -96,14 +101,64 @@ def delete_document(user_id: str, file_id: str) -> None:
 
 # ---------- conversation memory ----------
 
+def _exchange_text(question: str, answer: str) -> str:
+    return f"User asked: {question}\nAssistant answered: {answer[:1500]}"
+
+
+def _fill(rows: list[dict]) -> None:
+    """rows: documents of the MongoDB "memories" collection."""
+    for i in range(0, len(rows), BATCH):
+        batch = rows[i:i + BATCH]
+        _memory().upsert(
+            ids=[r["_id"] for r in batch],
+            embeddings=[r["embedding"] for r in batch],
+            documents=[r["text"] for r in batch],
+            metadatas=[{k: r[k] for k in ("user_id", "session_id", "created_at")} for r in batch],
+        )
+
+
+def _remember_many(exchanges: list[dict]) -> None:
+    """exchanges: {"_id", "user_id", "session_id", "created_at", "text"}; the id is that of the assistant message."""
+    vectors = llm.embed([e["text"] for e in exchanges], "RETRIEVAL_DOCUMENT")
+    rows = [{**e, "embedding": v} for e, v in zip(exchanges, vectors)]
+    for row in rows:
+        saved_memories.replace_one({"_id": row["_id"]}, row, upsert=True)
+    _fill(rows)
+
+
 def remember(user_id: str, session_id: str, message_id: str, question: str, answer: str, created_at: str) -> None:
-    text = f"User asked: {question}\nAssistant answered: {answer[:1500]}"
-    _memory().add(
-        ids=[message_id],
-        embeddings=llm.embed([text], "RETRIEVAL_DOCUMENT"),
-        documents=[text],
-        metadatas=[{"user_id": user_id, "session_id": session_id, "created_at": created_at}],
-    )
+    text = _exchange_text(question, answer)
+    _remember_many([{
+        "_id": message_id, "user_id": user_id, "session_id": session_id, "created_at": created_at, "text": text,
+    }])
+
+
+def restore_memory() -> None:
+    """Put back the remembered exchanges this store lost (run at startup; needs no embedding)."""
+    known = _memory().get(include=[])["ids"]
+    _fill(list(saved_memories.find({"_id": {"$nin": known}})))
+
+
+def backfill_memory() -> None:
+    """Remember the exchanges of existing chats that were never stored (run at startup, in the background)."""
+    known = set(saved_memories.distinct("_id"))
+    question: dict[str, str] = {}
+    missing = []
+    for m in messages.find().sort([("session_id", 1), ("created_at", 1)]):
+        if m["role"] == "user":
+            question[m["session_id"]] = m["content"]
+        elif str(m["_id"]) not in known and m["session_id"] in question:
+            missing.append({
+                "_id": str(m["_id"]), "user_id": m["user_id"], "session_id": m["session_id"],
+                "created_at": m["created_at"].isoformat(),
+                "text": _exchange_text(question[m["session_id"]], m["content"]),
+            })
+    if not missing:
+        return
+    try:
+        _remember_many(missing)
+    except llm.LLMError:
+        pass  # no key or no quota right now; the next start tries again
 
 
 def recall(user_id: str, query_vector: list[float], skip_ids: set[str], k: int = 3) -> list[str]:
@@ -125,6 +180,7 @@ def recall(user_id: str, query_vector: list[float], skip_ids: set[str], k: int =
 
 
 def forget_session(user_id: str, session_id: str) -> None:
+    saved_memories.delete_many({"user_id": user_id, "session_id": session_id})
     _memory().delete(where={"$and": [{"user_id": user_id}, {"session_id": session_id}]})
 
 
