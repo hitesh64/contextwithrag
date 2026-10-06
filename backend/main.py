@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pymongo.errors import PyMongoError
 
-from . import routes_auth, routes_chat, routes_files
+from . import routes_auth, routes_chat, routes_files, vector_store
 from .config import settings
 from .database import init_db
 
@@ -18,6 +18,7 @@ async def lifespan(app: FastAPI):
         init_db()
     except PyMongoError as e:
         raise RuntimeError(f"Cannot connect to MongoDB at {settings.MONGO_URI}. Is it running?") from e
+    vector_store.init()
     yield
 
 

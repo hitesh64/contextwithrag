@@ -6,7 +6,7 @@ Two persistent collections, both filtered per user:
 
 Embeddings use Chroma's built-in all-MiniLM-L6-v2 (ONNX) model, which runs locally.
 """
-from functools import lru_cache
+import threading
 
 import chromadb
 
@@ -19,13 +19,28 @@ BATCH = 4
 MEMORY_MAX_DISTANCE = 0.75
 
 
-@lru_cache
-def _client():
-    return chromadb.PersistentClient(path=str(settings.CHROMA_DIR))
+_lock = threading.Lock()
+_collections: dict = {}
+
+
+def init() -> None:
+    """Open the store and both collections exactly once.
+
+    Requests run in a thread pool; two of them opening a fresh store at the same time corrupts
+    its setup ("Could not connect to tenant default_tenant"), so opening is serialised here
+    and done at server startup.
+    """
+    with _lock:
+        if not _collections:
+            client = chromadb.PersistentClient(path=str(settings.CHROMA_DIR))
+            for name in ("documents", "long_term_memory"):
+                _collections[name] = client.get_or_create_collection(name, metadata={"hnsw:space": "cosine"})
 
 
 def _collection(name: str):
-    return _client().get_or_create_collection(name, metadata={"hnsw:space": "cosine"})
+    if not _collections:
+        init()
+    return _collections[name]
 
 
 def _documents():
