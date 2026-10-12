@@ -71,3 +71,14 @@ def get_current_user(creds: HTTPAuthorizationCredentials | None = Depends(bearer
     user["id"] = str(user["_id"])
     return user
 
+
+
+def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    if user.get("role") != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only an administrator can do this.")
+    return user
+
+
+def reader_department(user: dict) -> str | None:
+    """The department whose documents the user may read; None for an administrator, who reads all."""
+    return None if user.get("role") == "admin" else user["department"]

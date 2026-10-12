@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pymongo.errors import PyMongoError
 
-from . import routes_auth, routes_chat, routes_files, vector_store
+from . import routes_admin, routes_auth, routes_banking, routes_chat, routes_files, vector_store
 from .config import settings
 from .database import init_db
 
@@ -20,6 +20,7 @@ async def lifespan(app: FastAPI):
     except PyMongoError as e:
         raise RuntimeError(f"Cannot connect to MongoDB at {settings.MONGO_URI}. Is it running?") from e
     vector_store.init()
+    vector_store.share_old_documents()
     vector_store.restore_memory()
     # Embedding calls the Gemini API, which must not hold up the start of the server
     threading.Thread(target=vector_store.backfill_memory, daemon=True).start()
@@ -35,6 +36,8 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 app.include_router(routes_auth.router)
 app.include_router(routes_files.router)
 app.include_router(routes_chat.router)
+app.include_router(routes_admin.router)
+app.include_router(routes_banking.router)
 
 
 # Windows does not know the .webp type by default
@@ -48,6 +51,13 @@ def health():
         "status": "ok",
         "llm_configured": bool(settings.GOOGLE_API_KEY),
         "max_upload_mb": settings.MAX_UPLOAD_MB,
+        "departments": settings.DEPARTMENTS,
+        "categories": settings.CATEGORIES,
+        "branches": settings.BRANCHES,
+        "account_types": settings.ACCOUNT_TYPES,
+        "loan_types": settings.LOAN_TYPES,
+        "card_types": settings.CARD_TYPES,
+        "currency": settings.CURRENCY,
     }
 
 

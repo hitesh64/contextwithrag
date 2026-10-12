@@ -23,6 +23,9 @@ def register(body: RegisterIn):
         "email": email,
         "password_hash": hash_password(body.password),
         "is_active": True,
+        # The first account sets the system up; an administrator promotes others later
+        "role": "staff" if users.find_one({}, {"_id": 1}) else "admin",
+        "department": body.department,
         "created_at": datetime.now(timezone.utc),
     }
     try:

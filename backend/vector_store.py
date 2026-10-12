@@ -1,8 +1,11 @@
 """ChromaDB: LONG-TERM memory.
 
-Two persistent collections, both filtered per user:
-  - documents         : chunks of the user's uploaded files (knowledge base)
-  - long_term_memory  : past question/answer pairs, recalled semantically in later chats
+Two persistent collections:
+  - documents         : chunks of the bank's documents, each marked with the departments that may read it
+  - long_term_memory  : past question/answer pairs of one user, recalled semantically in later chats
+
+Documents are found by hybrid search: the vector ranking and a keyword (BM25) ranking of the
+same chunks are merged, so exact strings such as part numbers and error codes are found too.
 
 Embeddings come from the Gemini API (llm.embed). Running an embedding model inside the server
 was too slow and too memory-hungry for a small host: a 24-chunk PDF took the best part of a
@@ -12,6 +15,7 @@ A host without a permanent disk loses this folder on every restart. Remembered e
 therefore also kept in MongoDB (with their vectors) and put back at startup, and exchanges
 that were never stored are embedded again from the chats that still exist.
 """
+import re
 import threading
 
 import chromadb
@@ -19,8 +23,11 @@ import chromadb
 from . import llm
 from .config import settings
 from .database import memories as saved_memories, messages
+from .keyword_search import KeywordIndex, fuse
 
 BATCH = 100
+# How many chunks each of the two rankings contributes before they are merged
+CANDIDATES = 20
 # Cosine distance above which a remembered conversation is considered unrelated
 # (with Gemini embeddings related exchanges score about 0.2, unrelated ones 0.4 and more)
 MEMORY_MAX_DISTANCE = 0.33
@@ -30,6 +37,8 @@ COLLECTIONS = {"documents": "documents_gemini", "long_term_memory": "long_term_m
 
 _lock = threading.Lock()
 _collections: dict = {}
+# reader department (None: administrator) -> (chunk ids, chunks, KeywordIndex); dropped when the library changes
+_keyword_cache: dict[str | None, tuple[list[str], list[dict], KeywordIndex]] = {}
 
 
 def init() -> None:
@@ -65,10 +74,37 @@ def _memory():
 
 # ---------- knowledge base ----------
 
-def add_document_chunks(user_id: str, file_id: str, source: str, chunks: list[dict]) -> None:
-    """chunks: {"text", "page"} as produced by processor.split_documents (page may be None)."""
+def _chunk(text: str, meta: dict) -> dict:
+    return {
+        "text": text, "source": meta.get("source", "Unknown"), "page": meta.get("page"),
+        "category": meta.get("category"), "effective_date": meta.get("effective_date"),
+    }
+
+
+def _department_flag(department: str) -> str:
+    """Chroma metadata holds no lists, so each department that may read a chunk is a flag of its own."""
+    return "dept_" + re.sub(r"[^a-z0-9]+", "_", department.lower()).strip("_")
+
+
+def _readable_by(department: str | None) -> dict | None:
+    """Filter for the chunks a reader of this department may see (None: an administrator, who sees all)."""
+    if department is None:
+        return None
+    return {"$or": [{"dept_all": True}, {_department_flag(department): True}]}
+
+
+def add_document_chunks(
+    file_id: str, source: str, chunks: list[dict], departments: list[str], category: str, effective_date: str | None
+) -> None:
+    """chunks: {"text", "page"} as produced by processor.split_documents (page may be None).
+
+    departments: who may read the document; empty means every department.
+    """
     col = _documents()
-    base = {"user_id": user_id, "file_id": file_id, "source": source}
+    base = {"file_id": file_id, "source": source, "category": category}
+    if effective_date:
+        base["effective_date"] = effective_date
+    base.update({_department_flag(d): True for d in departments} or {"dept_all": True})
     # Embed everything first, so a failed embedding leaves nothing half-stored
     vectors = llm.embed([c["text"] for c in chunks], "RETRIEVAL_DOCUMENT")
     for i in range(0, len(chunks), BATCH):
@@ -79,24 +115,60 @@ def add_document_chunks(user_id: str, file_id: str, source: str, chunks: list[di
             documents=[c["text"] for c in batch],
             metadatas=[{**base, "page": c["page"]} if c["page"] else base for c in batch],
         )
+    _keyword_cache.clear()
 
 
-def search_documents(user_id: str, query_vector: list[float], k: int = 8) -> list[dict]:
-    res = _documents().query(query_embeddings=[query_vector], n_results=k, where={"user_id": user_id})
-    return [
-        {"text": doc, "source": meta.get("source", "Unknown"), "page": meta.get("page")}
-        for doc, meta in zip(res["documents"][0], res["metadatas"][0])
-    ]
+def _keywords(department: str | None) -> tuple[list[str], list[dict], KeywordIndex]:
+    cached = _keyword_cache.get(department)
+    if cached is None:
+        res = _documents().get(where=_readable_by(department), include=["documents", "metadatas"])
+        chunks = [_chunk(doc, meta) for doc, meta in zip(res["documents"], res["metadatas"])]
+        cached = _keyword_cache[department] = (res["ids"], chunks, KeywordIndex([c["text"] for c in chunks]))
+    return cached
 
 
-def indexed_file_ids(user_id: str) -> set[str]:
+def search_documents(department: str | None, question: str, query_vector: list[float], k: int = 8) -> list[dict]:
+    """Hybrid search: the best k chunks this reader may see, by meaning (vectors) and by wording (BM25) together.
+
+    department: the reader's department, or None for an administrator.
+    """
+    res = _documents().query(
+        query_embeddings=[query_vector], n_results=CANDIDATES, where=_readable_by(department)
+    )
+    by_meaning = res["ids"][0]
+    found = {
+        id_: _chunk(doc, meta) for id_, doc, meta in zip(by_meaning, res["documents"][0], res["metadatas"][0])
+    }
+
+    ids, chunks, index = _keywords(department)
+    by_wording = []
+    for position in index.search(question, CANDIDATES):
+        by_wording.append(ids[position])
+        found.setdefault(ids[position], chunks[position])
+
+    return [found[id_] for id_ in fuse([by_meaning, by_wording], k)]
+
+
+def indexed_file_ids() -> set[str]:
     """Files that really have chunks here (the store is wiped when a host without a disk restarts)."""
-    metas = _documents().get(where={"user_id": user_id}, include=["metadatas"])["metadatas"]
-    return {m["file_id"] for m in metas}
+    return {m["file_id"] for m in _documents().get(include=["metadatas"])["metadatas"]}
 
 
-def delete_document(user_id: str, file_id: str) -> None:
-    _documents().delete(where={"$and": [{"user_id": user_id}, {"file_id": file_id}]})
+def delete_document(file_id: str) -> None:
+    _documents().delete(where={"file_id": file_id})
+    _keyword_cache.clear()
+
+
+def share_old_documents() -> None:
+    """Chunks stored before departments existed carry no reader; make them readable by everyone (run at startup)."""
+    res = _documents().get(include=["metadatas"])
+    old = [
+        (id_, meta) for id_, meta in zip(res["ids"], res["metadatas"])
+        if not any(key.startswith("dept_") for key in meta)
+    ]
+    for i in range(0, len(old), BATCH):
+        batch = old[i:i + BATCH]
+        _documents().update(ids=[id_ for id_, _ in batch], metadatas=[{**meta, "dept_all": True} for _, meta in batch])
 
 
 # ---------- conversation memory ----------

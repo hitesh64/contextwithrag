@@ -408,6 +408,57 @@
   .msg tbody tr:last-child td { border-bottom: 0; }
   .sources { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line-soft); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .74rem; color: var(--ink-mute); }
   .chip { font-family: Consolas, monospace; }
+  select.sel, input.sel { width: 100%; padding: 7px 9px; font: inherit; font-size: .78rem; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: var(--r-md); }
+  .login select.sel { padding: 11px 12px; font-size: 14px; }
+  .publish { margin: 4px 14px 0; display: grid; gap: 6px; }
+  .publish label { font-size: .6rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-mute); }
+  .file-item .name small { display: block; font-size: .64rem; color: var(--ink-mute); overflow: hidden; text-overflow: ellipsis; }
+  .cite-meta { color: var(--ink-mute); }
+  .admin-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(8,10,16,.55); }
+  .admin-card { width: 100%; max-width: 980px; max-height: 88vh; display: flex; flex-direction: column; background: #fff; border-radius: 16px; border: 1px solid var(--line); box-shadow: var(--shadow-card); overflow: hidden; }
+  .admin-head { display: flex; align-items: center; gap: 8px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .admin-head h2 { flex: 1; margin: 0; font-size: 1rem; }
+  .admin-tabs { display: flex; gap: 6px; padding: 10px 18px 0; flex-wrap: wrap; }
+  .admin-tabs button { padding: 6px 12px; border-radius: 14px; border: 1px solid var(--line); background: #fff; font: inherit; font-size: .76rem; color: var(--ink-soft); cursor: pointer; }
+  .admin-tabs button.active { color: #fff; background: var(--brand); border-color: var(--brand); }
+  .admin-body { padding: 12px 18px 18px; overflow: auto; }
+  .admin-body table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+  .admin-body th { text-align: left; font-size: .62rem; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-mute); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .admin-body td { padding: 8px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: top; overflow-wrap: anywhere; }
+  .admin-body td.nowrap { white-space: nowrap; }
+  .tag-no { color: var(--red); font-weight: 600; } .tag-yes { color: var(--ink-mute); }
+  .admin-note { font-size: .76rem; color: var(--ink-mute); margin: 0 0 10px; }
+
+  /* ---- Banking operations ---- */
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .toolbar .sel, .toolbar input[type="search"] { width: auto; min-width: 180px; }
+  .toolbar .spacer { flex: 1; }
+  .bank-card { width: 100%; max-width: 520px; max-height: 88vh; display: flex; flex-direction: column; background: #fff; border-radius: 16px; border: 1px solid var(--line); box-shadow: var(--shadow-card); overflow: hidden; }
+  .bank-card .admin-body { padding: 16px 20px 20px; }
+  .badge.ok { color: #15803d; background: rgba(21,128,61,.12); }
+  .badge.warn { color: #b45309; background: rgba(180,83,9,.12); }
+  .badge.bad { color: var(--red); background: rgba(220,38,38,.12); }
+  .badge.muted { color: var(--ink-mute); background: var(--bg-tertiary); }
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: .78rem; }
+  .bar-row .bar-label { width: 90px; flex: none; color: var(--ink-soft); }
+  .bar-row .bar-track { flex: 1; height: 10px; border-radius: 6px; background: var(--bg-tertiary); overflow: hidden; display: block; }
+  .bar-row .bar-fill { display: block; height: 100%; min-width: 2px; border-radius: 6px; background: var(--brand); }
+  .bar-row .bar-count { width: 28px; flex: none; text-align: right; color: var(--ink-mute); }
+  .clickable-row { cursor: pointer; }
+  .clickable-row:hover { background: var(--bg-tertiary); }
+  .attach-btn { flex: none; width: 38px; height: 38px; border: 0; background: none; cursor: pointer; border-radius: var(--r-md); color: var(--ink-mute); font-size: 1.05rem; transition: color .18s ease, background .18s ease; }
+  .attach-btn:hover { color: var(--brand); background: var(--brand-light); }
+  .photo-preview { width: fit-content; margin: 0 auto 8px; padding: 6px 8px; display: flex; align-items: center; gap: 8px; font-size: .78rem; color: var(--ink-mute); background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-card); }
+  .photo-preview img { width: 54px; height: 54px; object-fit: cover; border-radius: var(--r-md); border: 1px solid var(--line); }
+  .msg-photo { display: block; max-width: min(240px, 100%); max-height: 240px; border-radius: 8px; margin-bottom: 8px; }
+  .photo-note { font-size: .74rem; opacity: .85; margin-bottom: 4px; }
+  .photo-reading { margin-bottom: 10px; padding: 8px 10px; font-size: .78rem; line-height: 1.5; white-space: pre-wrap; color: var(--ink-soft); background: var(--bg-secondary); border-left: 2px solid var(--brand); border-radius: var(--r-sm); }
+  .citations { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line-soft); display: grid; gap: 6px; font-size: .74rem; color: var(--ink-mute); }
+  .citations summary { cursor: pointer; display: flex; align-items: center; gap: 6px; list-style: none; }
+  .citations summary::-webkit-details-marker { display: none; }
+  .citations summary:hover .cite-file { color: var(--brand); }
+  .cite-file { font-family: Consolas, monospace; color: var(--ink-strong); overflow-wrap: anywhere; }
+  .cite-text { margin: 6px 0 4px; padding: 8px 10px; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .76rem; line-height: 1.5; color: var(--ink-strong); background: var(--bg-secondary); border-left: 2px solid var(--brand); border-radius: var(--r-sm); }
   .typing span { display: inline-block; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; background: var(--ink-mute); animation: blink 1.2s infinite both; }
   .typing span:nth-child(2) { animation-delay: .2s; } .typing span:nth-child(3) { animation-delay: .4s; }
   @keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
@@ -514,15 +565,15 @@
 
 <!-- ================= LOGIN ================= -->
 <section id="auth" class="login hidden">
-  <div class="login-rail">Code · Requirements · Documentation · Answers</div>
-  <div class="tagline login-tagline"><span>Understand</span><span>your project</span><span>faster</span></div>
+  <div class="login-rail">Policies · Circulars · Procedures · Answers</div>
+  <div class="tagline login-tagline"><span>Find</span><span>the rule</span><span>faster</span></div>
 
   <canvas id="confetti" aria-hidden="true"></canvas>
 
   <div class="auth-card">
     <div class="brand"><div class="brand-mark">C</div>CONTEXTWITHRAG</div>
     <h2 id="authTitle">Sign in to continue</h2>
-    <p class="sub" id="authSub">Analyze source code, requirements and project documentation in one place.</p>
+    <p class="sub" id="authSub">Ask the bank's policies, circulars and procedures, and get the answer with the page it comes from.</p>
     <div class="steps" id="authSteps" aria-hidden="true">
       <div class="step"><span class="step-dot"><b>1</b><i class="fa-solid fa-check"></i></span>Welcome</div>
       <span class="step-line"></span>
@@ -554,6 +605,10 @@
           <div class="field hidden" id="emailField">
             <label for="email">Email</label>
             <div class="inp"><i class="fa-regular fa-envelope"></i><input id="email" type="email" autocomplete="email" placeholder="Enter your email"></div>
+          </div>
+          <div class="field hidden" id="departmentField">
+            <label for="department">Department</label>
+            <select id="department" class="sel"></select>
           </div>
           <div class="field">
             <label for="password">Password</label>
@@ -603,21 +658,21 @@
     <button class="hamburger" id="menuBtn" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
     <div class="hdr-brand">
       <div class="wordmark"><div class="brand-mark">C</div><span class="wordmark-text">CONTEXTWITHRAG</span></div>
-      <div class="hdr-sub">Code · Requirements · Documentation</div>
+      <div class="hdr-sub">Policies · Circulars · Procedures</div>
     </div>
 
     <div class="hdr-slides" aria-hidden="true">
-      <div class="slide" style="--i:0; --img:url(img/slide0.webp)"><span class="slide-cap"><i class="fa-solid fa-code"></i>Code analysis</span></div>
-      <div class="slide" style="--i:1; --img:url(img/slide1.webp)"><span class="slide-cap"><i class="fa-solid fa-folder-open"></i>Knowledge base</span></div>
-      <div class="slide" style="--i:2; --img:url(img/slide2.webp)"><span class="slide-cap"><i class="fa-solid fa-comments"></i>Chat with your project</span></div>
-      <div class="slide" style="--i:3; --img:url(img/slide3.webp)"><span class="slide-cap"><i class="fa-solid fa-brain"></i>Long-term memory</span></div>
+      <div class="slide" style="--i:0; --img:url(img/slide0.webp)"><span class="slide-cap"><i class="fa-solid fa-scale-balanced"></i>Policies and circulars</span></div>
+      <div class="slide" style="--i:1; --img:url(img/slide1.webp)"><span class="slide-cap"><i class="fa-solid fa-folder-open"></i>Document library</span></div>
+      <div class="slide" style="--i:2; --img:url(img/slide2.webp)"><span class="slide-cap"><i class="fa-solid fa-comments"></i>Answers with the source page</span></div>
+      <div class="slide" style="--i:3; --img:url(img/slide3.webp)"><span class="slide-cap"><i class="fa-solid fa-shield-halved"></i>Access by department</span></div>
       <div class="slide-dots"><i style="--i:0"></i><i style="--i:1"></i><i style="--i:2"></i><i style="--i:3"></i></div>
     </div>
 
     <div class="hdr-controls">
       <label class="hdr-field search">
         <i class="fa-solid fa-magnifying-glass"></i>
-        <input id="search" type="search" placeholder="Search chats and files…" autocomplete="off" aria-label="Search chats and files">
+        <input id="search" type="search" placeholder="Search chats and documents…" autocomplete="off" aria-label="Search chats and files">
         <span class="kbd">Ctrl K</span>
       </label>
       <button type="button" class="hdr-field chip-btn" id="chatChip" title="Go to current chat">
@@ -628,7 +683,7 @@
       </button>
     </div>
 
-    <div class="tagline hdr-tagline"><span>Understand</span><span>your project</span><span>faster</span></div>
+    <div class="tagline hdr-tagline"><span>Find</span><span>the rule</span><span>faster</span></div>
 
     <div class="hdr-decor" aria-hidden="true">
       <div class="orb a"></div><div class="orb b"></div>
@@ -652,11 +707,29 @@
       <div class="side-scroll">
         <div class="nav-title"><span>Main</span></div>
         <button class="nav-item" id="newChatBtn" type="button" data-tip="New chat"><i class="fa-solid fa-plus"></i><span class="lbl">New chat</span></button>
-        <button class="nav-item" id="uploadBtn" type="button" data-tip="Upload a file"><i class="fa-solid fa-cloud-arrow-up"></i><span class="lbl">Upload a file</span><span class="nav-badge hidden" id="fileCount"></span></button>
+        <button class="nav-item admin-only hidden" id="uploadBtn" type="button" data-tip="Publish a document"><i class="fa-solid fa-cloud-arrow-up"></i><span class="lbl">Publish a document</span></button>
+        <button class="nav-item admin-only hidden" id="adminBtn" type="button" data-tip="Administration"><i class="fa-solid fa-user-shield"></i><span class="lbl">Administration</span></button>
 
-        <div class="nav-title"><span>Knowledge base</span></div>
+        <div class="nav-title"><span>Banking Operations</span></div>
+        <button class="nav-item bank-nav" data-section="dashboard" type="button" data-tip="Dashboard"><i class="fa-solid fa-gauge-high"></i><span class="lbl">Dashboard</span></button>
+        <button class="nav-item bank-nav" data-section="customers" type="button" data-tip="Customers"><i class="fa-solid fa-users"></i><span class="lbl">Customers</span></button>
+        <button class="nav-item bank-nav" data-section="accounts" type="button" data-tip="Accounts"><i class="fa-solid fa-building-columns"></i><span class="lbl">Accounts</span></button>
+        <button class="nav-item bank-nav" data-section="transactions" type="button" data-tip="Transactions"><i class="fa-solid fa-right-left"></i><span class="lbl">Transactions</span></button>
+        <button class="nav-item bank-nav" data-section="loans" type="button" data-tip="Loans"><i class="fa-solid fa-hand-holding-dollar"></i><span class="lbl">Loans</span></button>
+        <button class="nav-item bank-nav" data-section="cards" type="button" data-tip="Cards"><i class="fa-solid fa-credit-card"></i><span class="lbl">Cards</span></button>
+
+        <div class="nav-title"><span>Document library</span><span class="nav-badge hidden" id="fileCount"></span></div>
         <div class="rail-hide">
-          <div class="dropzone" id="dropzone">Click or drop a file here<br><small>Code, PDF, DOCX, PPTX · one file at a time · max <span id="maxMb">5</span> MB</small></div>
+          <!-- What the next published document is filed as -->
+          <div class="publish admin-only hidden">
+            <label for="pubCategory">Type</label>
+            <select id="pubCategory" class="sel"></select>
+            <label for="pubDate">In effect from</label>
+            <input id="pubDate" type="date" class="sel">
+            <label for="pubReaders">Who may read it</label>
+            <select id="pubReaders" class="sel"></select>
+          </div>
+          <div class="dropzone admin-only hidden" id="dropzone">Click or drop a document here<br><small>PDF (scans too), DOCX, PPTX, photos · one file at a time · max <span id="maxMb">5</span> MB</small></div>
           <input type="file" id="fileInput" class="hidden">
           <div id="fileList"></div>
         </div>
@@ -676,16 +749,23 @@
       <div class="content-area" id="messages">
         <div class="page-header">
           <h1><i class="fa-solid fa-comments"></i><span id="chatTitle">New chat</span></h1>
-          <span class="page-sub">Knowledge base &amp; chat</span>
+          <span class="page-sub">Document library &amp; chat</span>
         </div>
         <div class="messages-inner" id="messagesInner"></div>
         <form class="composer" id="composer">
+          <div class="photo-preview hidden" id="photoPreview">
+            <img id="photoThumb" alt="Attached photo"><span>Photo attached</span>
+            <button type="button" class="icon-btn" id="photoRemove" aria-label="Remove photo"><i class="fa-solid fa-xmark"></i></button>
+          </div>
           <div class="composer-inner">
-            <textarea id="prompt" rows="1" maxlength="4000" placeholder="Ask about your project…"></textarea>
-            <button class="btn btn-primary" id="sendBtn" type="submit"><i class="fa-solid fa-wand-magic-sparkles"></i>Analyze</button>
+            <button type="button" class="attach-btn" id="photoBtn" title="Attach a picture of a form, cheque or screen" aria-label="Attach a picture of a form, cheque or screen"><i class="fa-solid fa-camera"></i></button>
+            <input type="file" id="photoInput" accept="image/*" class="hidden">
+            <textarea id="prompt" rows="1" maxlength="4000" placeholder="Ask about a policy, limit or procedure…"></textarea>
+            <button class="btn btn-primary" id="sendBtn" type="submit"><i class="fa-solid fa-wand-magic-sparkles"></i>Ask</button>
           </div>
         </form>
       </div>
+      <div class="content-area hidden" id="bankingArea"></div>
     </main>
   </div>
   <div class="rail-tip" id="railTip"></div>
@@ -700,7 +780,9 @@ const TOKEN_KEY = 'nexus_token';
 const RAIL_KEY = 'nexus_rail';
 const $ = (id) => document.getElementById(id);
 const state = { token: localStorage.getItem(TOKEN_KEY), user: null, sessionId: null, mode: 'login', busy: false,
-  stats: { files: '–', chats: '–', memory: '–', ttl: null }, maxUploadMb: 5, uploading: false, authStep: 1, enterTimer: null };
+  stats: { files: '–', chats: '–', memory: '–', ttl: null }, maxUploadMb: 5, uploading: false, authStep: 1, enterTimer: null,
+  bank: { section: null, customers: [], accounts: [], loans: null, cards: null, stats: null, txnCache: {},
+    meta: { branches: [], accountTypes: [], loanTypes: [], cardTypes: [], currency: 'INR' } } };
 
 // ---------- helpers ----------
 function el(tag, props = {}, ...children) {
@@ -794,6 +876,7 @@ function setMode(mode) {
   $('authTabs').classList.toggle('register', reg);
   $('usernameHint').classList.toggle('hidden', !reg);
   $('emailField').classList.toggle('hidden', !reg);
+  $('departmentField').classList.toggle('hidden', !reg);
   $('confirmField').classList.toggle('hidden', !reg);
   $('pwMeter').classList.toggle('show', reg);
   $('password').autocomplete = reg ? 'new-password' : 'current-password';
@@ -832,7 +915,7 @@ function setAuthStep(step) {
     : step === 2 ? (reg ? 'Create your account' : 'Enter your credentials')
     : (reg ? 'Account created successfully' : 'Signed in successfully');
   $('authSub').textContent = step === 1
-    ? 'Analyze source code, requirements and project documentation in one place.'
+    ? "Ask the bank's policies, circulars and procedures, and get the answer with the page it comes from."
     : 'Welcome to CONTEXTWITHRAG';
 }
 
@@ -1005,7 +1088,7 @@ $('authForm').onsubmit = async (e) => {
   try {
     if (state.mode === 'register') {
       // Registering does not sign the user in: they continue on the login form
-      const user = await api('/api/auth/register', { method: 'POST', json: { username, email, password } });
+      const user = await api('/api/auth/register', { method: 'POST', json: { username, email, password, department: $('department').value } });
       $('authForm').reset();
       setMode('login');
       $('username').value = user.username;
@@ -1051,7 +1134,8 @@ function enterApp(user) {
   $('app').classList.remove('hidden');
   $('avatar').textContent = user.username[0].toUpperCase();
   $('whoName').textContent = user.username;
-  $('whoEmail').textContent = user.email;
+  $('whoEmail').textContent = `${user.department} · ${user.role === 'admin' ? 'Administrator' : 'Staff'}`;
+  document.querySelectorAll('.admin-only').forEach((n) => n.classList.toggle('hidden', user.role !== 'admin'));
   newChat();
   loadFiles(); loadSessions(); loadMemory();
 }
@@ -1063,8 +1147,8 @@ function setTitle(title) {
 
 // Dashboard cards on the welcome screen; values come from the sidebar data
 const KPIS = [
-  { key: 'files', tone: 'blue', icon: 'fa-folder-open', label: 'Files indexed', sub: () => 'Code, PDF, DOCX, PPTX',
-    action: () => $('fileInput').click() },
+  { key: 'files', tone: 'blue', icon: 'fa-folder-open', label: 'Documents you can read', sub: () => state.user?.department || '',
+    action: () => $('search').focus() },
   { key: 'chats', tone: 'purple', icon: 'fa-comments', label: 'Recent chats', sub: () => (state.stats.ttl ? `kept ${state.stats.ttl}h` : 'Short-term memory'),
     action: () => $('search').focus() },
   { key: 'memory', tone: 'teal', icon: 'fa-brain', label: 'Remembered exchanges', sub: () => 'Long-term memory (ChromaDB)',
@@ -1099,20 +1183,39 @@ function showWelcome() {
     el('div', { className: 'kpi-grid' }, ...cards),
     el('div', { className: 'card-panel' }, el('div', { className: 'welcome-body' },
       el('div', { className: 'brand-mark', textContent: 'C' }),
-      el('h2', { textContent: 'How can I help with your project?' }),
-      el('div', { textContent: 'Upload your code or documents on the left, then ask anything about them.' }))),
+      el('h2', { textContent: 'What do you need to look up?' }),
+      el('div', { textContent: 'Ask about a limit, an approval level or a procedure. Every answer names the document and page it rests on.' }))),
   ));
   updateStats();
 }
 
-function addMessage(role, content, sources = []) {
+// more: fields of a saved message (sources, citations, has_photo, photo_reading) or { photo } just attached
+function addMessage(role, content, more = {}) {
+  const { sources = [], citations = [], photo, has_photo, photo_reading } = more;
   const inner = $('messagesInner');
   inner.querySelector('.welcome')?.remove();
   const bubble = el('div', { className: 'msg ' + role });
-  if (role === 'user') bubble.textContent = content;
-  else {
+  if (role === 'user') {
+    // Photos are not stored, so a chat opened again only says that there was one
+    if (photo) bubble.append(el('img', { className: 'msg-photo', src: photo, alt: 'Attached photo' }));
+    else if (has_photo) bubble.append(el('div', { className: 'photo-note' }, icon('fa-camera'), ' Photo attached'));
+    bubble.append(content);
+  } else {
+    if (photo_reading) {
+      bubble.append(el('div', { className: 'photo-reading' },
+        el('strong', { textContent: 'Read from your photo: ' }), photo_reading));
+    }
     bubble.append(...renderMarkdown(content).childNodes);
-    if (sources.length) {
+    if (citations.length) {
+      // Each [n] of the answer, with the passage it stands for (click to read it)
+      bubble.append(el('div', { className: 'citations' }, 'Sources (click to read the passage):',
+        ...citations.map((c) => el('details', {},
+          el('summary', {},
+            el('span', { className: 'badge', textContent: `[${c.number}]` }),
+            el('span', { className: 'cite-file', textContent: c.source + (c.page ? `, page ${c.page}` : '') }),
+            el('span', { className: 'cite-meta', textContent: [c.category, c.effective_date && `in effect from ${c.effective_date}`].filter(Boolean).join(' · ') })),
+          el('div', { className: 'cite-text', textContent: c.text })))));
+    } else if (sources.length) {
       bubble.append(el('div', { className: 'sources' }, 'Referenced:',
         ...sources.map((s) => el('span', { className: 'badge chip', textContent: s }))));
     }
@@ -1124,12 +1227,33 @@ function addMessage(role, content, sources = []) {
 
 function newChat() {
   state.sessionId = null;
+  showChatArea();
   setTitle('New chat');
   showWelcome();
   markActiveSession();
   $('app').classList.remove('menu-open');
   $('prompt').focus();
 }
+
+// Swap between the chat pane and a banking section pane; both live under <main>
+function showChatArea() {
+  state.bank.section = null;
+  document.querySelectorAll('.bank-nav').forEach((n) => n.classList.remove('active'));
+  $('bankingArea').classList.add('hidden');
+  $('messages').classList.remove('hidden');
+}
+
+function showBankingSection(section) {
+  state.bank.section = section;
+  $('messages').classList.add('hidden');
+  $('bankingArea').classList.remove('hidden');
+  $('app').classList.remove('menu-open');
+  document.querySelectorAll('#sessionList .nav-item, #newChatBtn').forEach((n) => n.classList.remove('active'));
+  document.querySelectorAll('.bank-nav').forEach((n) => n.classList.toggle('active', n.dataset.section === section));
+  renderBankingSection(section);
+}
+
+document.querySelectorAll('.bank-nav').forEach((btn) => btn.onclick = () => showBankingSection(btn.dataset.section));
 
 $('newChatBtn').onclick = newChat;
 $('menuBtn').onclick = () => $('app').classList.toggle('menu-open');
@@ -1197,35 +1321,70 @@ $('prompt').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('composer').requestSubmit(); }
 });
 
+// ---------- photo of the problem ----------
+// Phone photos are several MB; this size keeps a display or nameplate readable in about 300 KB
+const PHOTO_MAX_SIDE = 1600;
+const PHOTO_QUESTION = 'What is this, and what do the bank\'s documents say I should do with it?';
+
+function setPhoto(dataUrl) {
+  state.photo = dataUrl;
+  $('photoPreview').classList.toggle('hidden', !dataUrl);
+  if (dataUrl) $('photoThumb').src = dataUrl;
+  $('photoInput').value = '';
+}
+
+async function pickPhoto(file) {
+  if (!file) return;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, PHOTO_MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+    const canvas = el('canvas', { width: Math.round(bitmap.width * scale), height: Math.round(bitmap.height * scale) });
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    setPhoto(canvas.toDataURL('image/jpeg', 0.85));
+    $('prompt').focus();
+  } catch {
+    toast('This file is not a photo that can be read.', true);
+  }
+}
+
+$('photoBtn').onclick = () => $('photoInput').click();
+$('photoInput').onchange = (e) => pickPhoto(e.target.files[0]);
+$('photoRemove').onclick = () => setPhoto(null);
+
 $('composer').onsubmit = async (e) => {
   e.preventDefault();
-  const message = $('prompt').value.trim();
+  const photo = state.photo;
+  const message = $('prompt').value.trim() || (photo ? PHOTO_QUESTION : '');
   if (!message || state.busy) return;
 
   state.busy = true;
   $('sendBtn').disabled = true;
   $('prompt').value = '';
   $('prompt').style.height = 'auto';
-  addMessage('user', message);
+  setPhoto(null);
+  addMessage('user', message, { photo });
   const typing = addMessage('assistant', '');
   typing.replaceChildren(el('div', { className: 'typing' }, el('span'), el('span'), el('span')));
 
   const askedIn = state.sessionId;
   try {
-    const data = await api('/api/chat', { method: 'POST', json: { message, session_id: state.sessionId } });
+    const json = { message, session_id: state.sessionId };
+    // A data URL is "data:image/jpeg;base64,<data>"; the server takes the data alone
+    if (photo) Object.assign(json, { image: photo.split(',')[1], image_type: 'image/jpeg' });
+    const data = await api('/api/chat', { method: 'POST', json });
     typing.remove();
     // Ignore the reply if the user switched to another chat while waiting
     if (state.sessionId === askedIn) {
       const isNew = !state.sessionId;
       state.sessionId = data.session_id;
       if (isNew) setTitle(message.slice(0, 60));
-      addMessage('assistant', data.answer, data.sources);
+      addMessage('assistant', data.answer, data);
     }
     loadSessions(); loadMemory();
   } catch (err) {
     typing.remove();
     toast(err.message, true);
-    if (state.sessionId === askedIn) $('prompt').value = message;
+    if (state.sessionId === askedIn) { $('prompt').value = message; setPhoto(photo); }
   } finally {
     state.busy = false;
     $('sendBtn').disabled = false;
@@ -1266,9 +1425,10 @@ async function openSession(id, title) {
   try {
     const msgs = await api(`/api/sessions/${id}/messages`);
     state.sessionId = id;
+    showChatArea();
     setTitle(title);
     $('messagesInner').replaceChildren();
-    msgs.forEach((m) => addMessage(m.role, m.content, m.sources));
+    msgs.forEach((m) => addMessage(m.role, m.content, m));
     markActiveSession();
     $('app').classList.remove('menu-open');
   } catch (err) { toast(err.message, true); loadSessions(); }
@@ -1301,13 +1461,19 @@ async function loadFiles() {
     state.stats.files = list.length;
     updateStats();
     const box = $('fileList');
-    if (!list.length) { box.replaceChildren(el('div', { className: 'empty', textContent: 'No files indexed yet.' })); return; }
+    if (!list.length) { box.replaceChildren(el('div', { className: 'empty', textContent: 'No documents published for your department yet.' })); return; }
+    const isAdmin = state.user.role === 'admin';
     box.replaceChildren(...list.map((f) => {
-      const del = el('button', { className: 'icon-btn', title: 'Remove file', type: 'button' }, icon('fa-xmark'));
-      del.onclick = () => deleteFile(f.id, f.filename);
-      return el('div', { className: 'file-item' }, icon('fa-file-lines'),
-        el('span', { className: 'name', textContent: f.filename, title: f.filename }),
-        el('span', { className: 'meta', textContent: `${f.chunks} chunk${f.chunks === 1 ? '' : 's'}` }), del);
+      const filed = [f.category, f.effective_date, isAdmin && (f.departments.length ? f.departments.join(', ') : 'All departments')];
+      const item = el('div', { className: 'file-item' }, icon('fa-file-lines'),
+        el('span', { className: 'name', title: f.filename }, f.filename,
+          el('small', { textContent: filed.filter(Boolean).join(' · ') })));
+      if (isAdmin) {
+        const del = el('button', { className: 'icon-btn', title: 'Remove document', type: 'button' }, icon('fa-xmark'));
+        del.onclick = () => deleteFile(f.id, f.filename);
+        item.append(del);
+      }
+      return item;
     }));
     applyFilter();
   } catch (err) { if (state.token) toast(err.message, true); }
@@ -1328,6 +1494,10 @@ async function uploadFile(fileList) {
   }
   const form = new FormData();
   form.append('upload', file);
+  form.append('category', $('pubCategory').value);
+  form.append('effective_date', $('pubDate').value);
+  // No department sent: every department may read it
+  if ($('pubReaders').value) form.append('departments', $('pubReaders').value);
   const zone = $('dropzone');
   const original = zone.innerHTML;
   state.uploading = true;
@@ -1336,7 +1506,7 @@ async function uploadFile(fileList) {
   $('uploadBtn').disabled = true;
   try {
     const res = await api('/api/files', { method: 'POST', body: form });
-    toast(`Indexed "${res.filename}" (${res.chunks} chunk${res.chunks === 1 ? '' : 's'}).`);
+    toast(`Published "${res.filename}" for ${res.departments.length ? res.departments.join(', ') : 'all departments'}.`);
     loadFiles();
   } catch (err) {
     toast(err.message, true);
@@ -1349,7 +1519,7 @@ async function uploadFile(fileList) {
 }
 
 async function deleteFile(id, name) {
-  if (!await confirmDialog(`Remove "${name}" from the knowledge base?`, { ok: 'Remove' })) return;
+  if (!await confirmDialog(`Remove "${name}" from the library? Nobody will get answers from it any more.`, { ok: 'Remove' })) return;
   try { await api(`/api/files/${id}`, { method: 'DELETE' }); loadFiles(); }
   catch (err) { toast(err.message, true); }
 }
@@ -1361,10 +1531,544 @@ $('dropzone').ondragover = (e) => { e.preventDefault(); $('dropzone').classList.
 $('dropzone').ondragleave = () => $('dropzone').classList.remove('drag');
 $('dropzone').ondrop = (e) => { e.preventDefault(); $('dropzone').classList.remove('drag'); uploadFile(e.dataTransfer.files); };
 
+// ---------- administration ----------
+const when = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+const table = (heads, rows) => el('table', {},
+  el('thead', {}, el('tr', {}, ...heads.map((h) => el('th', { textContent: h })))),
+  el('tbody', {}, ...rows));
+
+async function adminUsers(body) {
+  const users = await api('/api/admin/users');
+  const change = async (user, field, select) => {
+    try { Object.assign(user, await api(`/api/admin/users/${user.id}`, { method: 'PATCH', json: { [field]: select.value } })); toast(`Updated ${user.username}.`); }
+    catch (err) { select.value = user[field]; toast(err.message, true); }
+  };
+  const picker = (user, field, options) => {
+    const select = el('select', { className: 'sel' }, ...options.map(([value, text]) => el('option', { value, textContent: text })));
+    select.value = user[field];
+    select.onchange = () => change(user, field, select);
+    return select;
+  };
+  body.replaceChildren(
+    el('p', { className: 'admin-note', textContent: 'Staff read the documents published for their department. Administrators read and publish everything.' }),
+    table(['User', 'Email', 'Department', 'Role'], users.map((u) => el('tr', {},
+      el('td', { textContent: u.username }), el('td', { textContent: u.email }),
+      el('td', {}, picker(u, 'department', state.departments.map((d) => [d, d]))),
+      el('td', {}, picker(u, 'role', [['staff', 'Staff'], ['admin', 'Administrator']]))))));
+}
+
+async function adminAudit(body, unanswered) {
+  const [rows, stats] = await Promise.all([api('/api/admin/audit' + (unanswered ? '?unanswered=true' : '')), api('/api/admin/stats')]);
+  const note = unanswered
+    ? `${stats.unanswered} of ${stats.questions} questions found no answer in the library. These are the documents still missing.`
+    : `${stats.questions} questions asked so far. The log is kept even after the chats themselves expire.`;
+  body.replaceChildren(
+    el('p', { className: 'admin-note', textContent: note }),
+    rows.length ? table(['When', 'Who', 'Department', 'Question', 'Answered from'], rows.map((a) => el('tr', {},
+      el('td', { className: 'nowrap', textContent: when(a.created_at) }), el('td', { className: 'nowrap', textContent: a.username }),
+      el('td', { textContent: a.department }), el('td', { textContent: a.question }),
+      a.answered
+        ? el('td', { className: 'tag-yes', textContent: a.citations.map((c) => c.source + (c.page ? ` p.${c.page}` : '')).join('; ') })
+        : el('td', { className: 'tag-no', textContent: 'No document' }))))
+      : el('div', { className: 'empty', textContent: 'Nothing here yet.' }));
+}
+
+// ---------- banking operations (self-contained demo records, no real bank/payment API) ----------
+
+const BANK_TITLES = {
+  dashboard: ['Dashboard', 'fa-gauge-high', 'Snapshot of accounts, balances and loans'],
+  customers: ['Customers', 'fa-users', 'Search and manage customer records'],
+  accounts: ['Accounts', 'fa-building-columns', 'Savings, current and fixed deposit accounts'],
+  transactions: ['Transactions', 'fa-right-left', 'Deposits, withdrawals and transfers'],
+  loans: ['Loans', 'fa-hand-holding-dollar', 'Loan applications and EMI schedule'],
+  cards: ['Cards', 'fa-credit-card', 'Debit and credit cards linked to accounts'],
+};
+
+const STATUS_TONE = {
+  active: 'ok', verified: 'ok', approved: 'ok', closed: 'muted',
+  pending: 'warn', frozen: 'warn',
+  rejected: 'bad', blocked: 'bad',
+};
+const statusBadgeFor = (s) => el('span', { className: 'badge ' + (STATUS_TONE[s] || 'muted'), textContent: s[0].toUpperCase() + s.slice(1) });
+const money = (n) => '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+const branchName = (code) => state.bank.meta.branches.find((b) => b.code === code)?.name || code;
+const customerLabel = (id) => { const c = state.bank.customers.find((x) => x.id === id); return c ? `${c.customer_code} — ${c.full_name}` : id; };
+const accountLabel = (a) => `${a.account_number} · ${a.account_type} · ${money(a.balance)}${customerLabel(a.customer_id) !== a.customer_id ? ' · ' + customerLabel(a.customer_id) : ''}`;
+
+// A small reusable create/edit dialog: fields describe the form, onSubmit does the API call.
+function modalForm({ title, iconName = 'fa-plus', submitLabel = 'Save', fields, onSubmit }) {
+  return new Promise((resolve) => {
+    const inputs = {};
+    const wraps = fields.map((f) => {
+      const id = 'mf_' + f.key;
+      let input;
+      if (f.type === 'select') {
+        input = el('select', { className: 'sel', id }, ...f.options.map(([v, t]) => el('option', { value: v, textContent: t })));
+      } else if (f.type === 'textarea') {
+        input = el('textarea', { className: 'sel', id, rows: 2 });
+      } else {
+        input = el('input', { className: 'sel', id, type: f.type || 'text' });
+      }
+      if (f.attrs) Object.assign(input, f.attrs);
+      if (f.value !== undefined) input.value = f.value;
+      inputs[f.key] = input;
+      const wrap = el('div', { className: 'field' }, el('label', { htmlFor: id, textContent: f.label }), input);
+      wrap.dataset.key = f.key;
+      return wrap;
+    });
+    const applyVisibility = () => {
+      const values = {}; fields.forEach((f) => values[f.key] = inputs[f.key].value);
+      wraps.forEach((w, i) => { const f = fields[i]; if (f.show) w.classList.toggle('hidden', !f.show(values)); });
+    };
+    // Any field can gate another's visibility (e.g. "type" gates "to_account_id"), so all of them re-check on change
+    fields.forEach((f) => inputs[f.key].addEventListener('change', applyVisibility));
+    applyVisibility();
+
+    const err = el('div', { className: 'admin-note', style: 'color:var(--red);min-height:1em' });
+    const cancelBtn = el('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Cancel' });
+    const okBtn = el('button', { className: 'btn btn-primary', type: 'button', textContent: submitLabel });
+    const closeBtn = el('button', { className: 'icon-btn', type: 'button', title: 'Close' }, icon('fa-xmark'));
+    const card = el('div', { className: 'bank-card' },
+      el('div', { className: 'admin-head' }, icon(iconName), el('h2', { textContent: title }), closeBtn),
+      el('div', { className: 'admin-body' }, ...wraps, err),
+      el('div', { className: 'confirm-actions' }, cancelBtn, okBtn));
+    const overlay = el('div', { className: 'admin-overlay' }, card);
+    const close = (result) => { overlay.remove(); document.removeEventListener('keydown', onKey); resolve(result); };
+    const onKey = (e) => { if (e.key === 'Escape') close(null); };
+    cancelBtn.onclick = () => close(null);
+    closeBtn.onclick = () => close(null);
+    overlay.onclick = (e) => { if (e.target === overlay) close(null); };
+    okBtn.onclick = async () => {
+      const values = {}; fields.forEach((f) => values[f.key] = inputs[f.key].value.trim());
+      okBtn.disabled = true;
+      try { const result = await onSubmit(values); close(result === undefined ? true : result); }
+      catch (e2) { err.textContent = e2.message; }
+      finally { okBtn.disabled = false; }
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.append(overlay);
+    wraps[0]?.querySelector('input,select,textarea')?.focus();
+  });
+}
+
+async function renderBankingSection(section) {
+  const [title, iconName, sub] = BANK_TITLES[section];
+  const body = el('div', { className: 'empty', textContent: 'Loading…' });
+  $('bankingArea').replaceChildren(
+    el('div', { className: 'page-header' }, el('h1', {}, icon(iconName), el('span', { textContent: title })),
+      el('span', { className: 'page-sub', textContent: sub })),
+    body);
+  try {
+    // Each renderer fetches only the caches it actually needs, so e.g. Dashboard and
+    // Customers (which don't need the customer/account lookup caches) load with one request.
+    const renderers = {
+      dashboard: renderDashboard, customers: renderCustomers, accounts: renderAccounts,
+      transactions: renderTransactions, loans: renderLoans, cards: renderCards,
+    };
+    await renderers[section](body);
+  } catch (err) {
+    body.replaceChildren(el('div', { className: 'empty', textContent: err.message }));
+  }
+}
+
+function paintDashboard(body, stats) {
+  const tiles = [
+    ['Customers', stats.customers, 'fa-users', 'blue'],
+    ['Accounts', stats.accounts, 'fa-building-columns', 'purple'],
+    ['Total balance', money(stats.total_balance), 'fa-sack-dollar', 'teal'],
+    ['Transactions this month', stats.transactions_this_month, 'fa-right-left', 'blue'],
+    ['Cards issued', stats.cards, 'fa-credit-card', 'purple'],
+  ];
+  const grid = el('div', { className: 'kpi-grid' }, ...tiles.map(([label, value, i, tone]) =>
+    el('div', { className: 'kpi ' + tone },
+      el('div', { className: 'kpi-icon' }, icon(i)), el('div', { className: 'kpi-label', textContent: label }),
+      el('div', { className: 'kpi-value', textContent: String(value) }), el('i', { className: 'kpi-art fa-solid ' + i }))));
+
+  const statuses = ['pending', 'approved', 'rejected', 'closed'];
+  const byStatus = stats.loans_by_status || {};
+  const max = Math.max(1, ...statuses.map((s) => byStatus[s] || 0));
+  const bars = el('div', { className: 'card-panel', style: 'padding:16px 18px' },
+    el('h2', { style: 'margin:0 0 12px;font-size:.95rem', textContent: 'Loans by status' }),
+    ...statuses.map((s) => el('div', { className: 'bar-row' },
+      el('span', { className: 'bar-label', textContent: s[0].toUpperCase() + s.slice(1) }),
+      el('span', { className: 'bar-track' }, el('span', { className: 'bar-fill', style: `width:${((byStatus[s] || 0) / max) * 100}%` })),
+      el('span', { className: 'bar-count', textContent: byStatus[s] || 0 }))));
+  body.replaceChildren(grid, bars);
+}
+
+async function renderDashboard(body) {
+  // Paint instantly from whatever we last fetched this session, then quietly refresh from the
+  // server -- so re-opening Dashboard never shows a loading flash after the first visit.
+  if (state.bank.stats) paintDashboard(body, state.bank.stats);
+  else body.replaceChildren(el('div', { className: 'empty', textContent: 'Loading…' }));
+  const stats = await api('/api/banking/stats');
+  state.bank.stats = stats;
+  paintDashboard(body, stats);
+}
+
+async function renderCustomers(body) {
+  const searchInput = el('input', { className: 'sel', type: 'search', placeholder: 'Search name, code, email, phone…' });
+  const newBtn = el('button', { className: 'btn btn-primary', type: 'button' }, icon('fa-plus'), ' New customer');
+  const toolbar = el('div', { className: 'toolbar' }, searchInput, el('span', { className: 'spacer' }), newBtn);
+  const tableWrap = el('div', { className: 'admin-body' });
+  body.replaceChildren(toolbar, tableWrap);
+
+  const paint = (list) => tableWrap.replaceChildren(!list.length ? el('div', { className: 'empty', textContent: 'No customers found.' }) :
+    table(['Code', 'Name', 'Email', 'Phone', 'Branch', 'KYC', 'Since'], list.map((c) => {
+      const row = el('tr', { className: 'clickable-row' },
+        el('td', { className: 'nowrap', textContent: c.customer_code }), el('td', { textContent: c.full_name }),
+        el('td', { textContent: c.email }), el('td', { className: 'nowrap', textContent: c.phone }),
+        el('td', { textContent: branchName(c.branch_code) }), el('td', {}, statusBadgeFor(c.kyc_status)),
+        el('td', { className: 'nowrap', textContent: when(c.created_at) }));
+      row.onclick = () => openCustomerDetail(c.id);
+      return row;
+    })));
+
+  const load = async (q = '') => {
+    const list = await api('/api/banking/customers' + (q ? `?q=${encodeURIComponent(q)}` : ''));
+    state.bank.customers = list;
+    paint(list);
+  };
+  // Instant paint from the last fetched (unfiltered) list; a search always goes to the server fresh.
+  if (state.bank.customers.length) paint(state.bank.customers);
+  else tableWrap.replaceChildren(el('div', { className: 'empty', textContent: 'Loading…' }));
+
+  let debounce;
+  searchInput.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => load(searchInput.value.trim()), 300); });
+  newBtn.onclick = () => newCustomer(() => load(searchInput.value.trim()));
+  await load();
+}
+
+async function newCustomer(onDone) {
+  const result = await modalForm({
+    title: 'New customer', iconName: 'fa-user-plus', submitLabel: 'Create',
+    fields: [
+      { key: 'full_name', label: 'Full name' },
+      { key: 'email', label: 'Email', type: 'email' },
+      { key: 'phone', label: 'Phone (10 digits)', attrs: { maxLength: 10 } },
+      { key: 'address', label: 'Address', type: 'textarea' },
+      { key: 'branch_code', label: 'Branch', type: 'select', options: state.bank.meta.branches.map((b) => [b.code, b.name]) },
+    ],
+    onSubmit: async (v) => { await api('/api/banking/customers', { method: 'POST', json: v }); toast(`Customer ${v.full_name} created.`); },
+  });
+  if (result) onDone();
+}
+
+async function openCustomerDetail(id) {
+  const { customer: c, accounts: accts, loans: lns } = await api(`/api/banking/customers/${id}`);
+  const closeBtn = el('button', { className: 'icon-btn', type: 'button', title: 'Close' }, icon('fa-xmark'));
+  const body = el('div', { className: 'admin-body' },
+    el('p', { className: 'admin-note' }, `${c.customer_code} · ${c.email} · ${c.phone} · ${branchName(c.branch_code)} · `, statusBadgeFor(c.kyc_status)),
+    el('h2', { style: 'font-size:.9rem;margin:14px 0 8px', textContent: 'Accounts' }),
+    accts.length ? table(['Account #', 'Type', 'Balance', 'Status'], accts.map((a) => el('tr', {},
+      el('td', { className: 'nowrap', textContent: a.account_number }), el('td', { textContent: a.account_type }),
+      el('td', { textContent: money(a.balance) }), el('td', {}, statusBadgeFor(a.status)))))
+      : el('div', { className: 'empty', textContent: 'No accounts yet.' }),
+    el('h2', { style: 'font-size:.9rem;margin:14px 0 8px', textContent: 'Loans' }),
+    lns.length ? table(['Type', 'Principal', 'EMI', 'Status'], lns.map((l) => el('tr', {},
+      el('td', { textContent: l.loan_type }), el('td', { textContent: money(l.principal) }),
+      el('td', { textContent: money(l.emi) }), el('td', {}, statusBadgeFor(l.status)))))
+      : el('div', { className: 'empty', textContent: 'No loans yet.' }));
+  const overlay = el('div', { className: 'admin-overlay' }, el('div', { className: 'admin-card' },
+    el('div', { className: 'admin-head' }, icon('fa-id-card'), el('h2', { textContent: c.full_name }), closeBtn), body));
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  closeBtn.onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  document.addEventListener('keydown', onKey);
+  document.body.append(overlay);
+}
+
+async function renderAccounts(body) {
+  const newBtn = el('button', { className: 'btn btn-primary', type: 'button' }, icon('fa-plus'), ' New account');
+  const toolbar = el('div', { className: 'toolbar' }, el('span', { className: 'spacer' }), newBtn);
+  const tableWrap = el('div', { className: 'admin-body' });
+  body.replaceChildren(toolbar, tableWrap);
+
+  const paint = (list) => tableWrap.replaceChildren(!list.length ? el('div', { className: 'empty', textContent: 'No accounts yet.' }) :
+    table(['Account #', 'Customer', 'Type', 'Balance', 'Branch', 'Status', ''], list.map((a) => {
+      const viewBtn = el('button', { className: 'btn btn-ghost', type: 'button', textContent: 'Statement' });
+      viewBtn.onclick = () => { state.bank.txnAccountId = a.id; showBankingSection('transactions'); };
+      return el('tr', {},
+        el('td', { className: 'nowrap', textContent: a.account_number }), el('td', { textContent: customerLabel(a.customer_id) }),
+        el('td', { textContent: a.account_type }), el('td', { textContent: money(a.balance) }),
+        el('td', { textContent: branchName(a.branch_code) }), el('td', {}, statusBadgeFor(a.status)), el('td', {}, viewBtn));
+    })));
+
+  const load = async () => {
+    const list = await api('/api/banking/accounts');
+    state.bank.accounts = list;
+    paint(list);
+  };
+  // Instant paint from whatever is already cached, then refresh accounts (and customer names if
+  // they were never loaded this session) quietly in the background.
+  if (state.bank.accounts.length) paint(state.bank.accounts);
+  else tableWrap.replaceChildren(el('div', { className: 'empty', textContent: 'Loading…' }));
+  newBtn.onclick = () => newAccount(load);
+
+  if (!state.bank.customers.length) {
+    state.bank.customers = await api('/api/banking/customers');
+    if (state.bank.accounts.length) paint(state.bank.accounts); // repaint now that customer names are known
+  }
+  await load();
+}
+
+async function newAccount(onDone) {
+  if (!state.bank.customers.length) { toast('Create a customer first.', true); return; }
+  const result = await modalForm({
+    title: 'New account', iconName: 'fa-building-columns', submitLabel: 'Create',
+    fields: [
+      { key: 'customer_id', label: 'Customer', type: 'select', options: state.bank.customers.map((c) => [c.id, `${c.customer_code} — ${c.full_name}`]) },
+      { key: 'account_type', label: 'Account type', type: 'select', options: state.bank.meta.accountTypes.map((t) => [t, t]) },
+      { key: 'branch_code', label: 'Branch', type: 'select', options: state.bank.meta.branches.map((b) => [b.code, b.name]) },
+      { key: 'opening_balance', label: 'Opening balance', type: 'number', attrs: { min: 0, step: '0.01' }, value: '0' },
+    ],
+    onSubmit: async (v) => {
+      await api('/api/banking/accounts', { method: 'POST', json: { ...v, opening_balance: Number(v.opening_balance || 0) } });
+      toast('Account created.');
+    },
+  });
+  if (result) onDone();
+}
+
+function buildAccountOptions() {
+  return [el('option', { value: '', textContent: 'Select an account…' }),
+    ...state.bank.accounts.map((a) => el('option', { value: a.id, textContent: accountLabel(a) }))];
+}
+
+function paintStatement(tableWrap, list) {
+  tableWrap.replaceChildren(!list.length ? el('div', { className: 'empty', textContent: 'No transactions yet.' }) :
+    table(['When', 'Type', 'Amount', 'Balance after', 'Note', 'By'], list.map((t) => el('tr', {},
+      el('td', { className: 'nowrap', textContent: when(t.created_at) }),
+      el('td', { textContent: t.type[0].toUpperCase() + t.type.slice(1) }),
+      el('td', { textContent: (t.direction === 'credit' ? '+' : '-') + money(t.amount) }),
+      el('td', { textContent: money(t.balance_after) }),
+      el('td', { textContent: t.description || '—' }), el('td', { textContent: t.created_by })))));
+}
+
+async function renderTransactions(body) {
+  const accSelect = el('select', { className: 'sel' }, ...buildAccountOptions());
+  const newBtn = el('button', { className: 'btn btn-primary', type: 'button' }, icon('fa-plus'), ' New transaction');
+  const toolbar = el('div', { className: 'toolbar' }, accSelect, el('span', { className: 'spacer' }), newBtn);
+  const tableWrap = el('div', { className: 'admin-body' }, el('div', { className: 'empty', textContent: 'Select an account above to view its statement.' }));
+  body.replaceChildren(toolbar, tableWrap);
+
+  const load = async () => {
+    const id = accSelect.value;
+    if (!id) { tableWrap.replaceChildren(el('div', { className: 'empty', textContent: 'Select an account above to view its statement.' })); return; }
+    // Instant paint from the last statement fetched for this account, then refresh quietly
+    if (state.bank.txnCache[id]) paintStatement(tableWrap, state.bank.txnCache[id]);
+    else tableWrap.replaceChildren(el('div', { className: 'empty', textContent: 'Loading…' }));
+    const list = await api(`/api/banking/accounts/${id}/transactions`);
+    state.bank.txnCache[id] = list;
+    if (accSelect.value === id) paintStatement(tableWrap, list);
+  };
+  accSelect.onchange = load;
+  newBtn.onclick = () => newTransaction(accSelect.value, async () => {
+    // The balances just changed, so drop any cached statements and refresh the account list in the background
+    state.bank.txnCache = {};
+    state.bank.txnAccountId = accSelect.value;
+    state.bank.accounts = await api('/api/banking/accounts');
+    accSelect.replaceChildren(...buildAccountOptions());
+    accSelect.value = state.bank.txnAccountId;
+    state.bank.txnAccountId = null;
+    load();
+  });
+
+  if (state.bank.txnAccountId) { accSelect.value = state.bank.txnAccountId; state.bank.txnAccountId = null; await load(); }
+
+  // Refresh the account list (names/balances) in the background without blocking the first paint
+  if (!state.bank.accounts.length) {
+    state.bank.accounts = await api('/api/banking/accounts');
+    const current = accSelect.value;
+    accSelect.replaceChildren(...buildAccountOptions());
+    accSelect.value = current;
+  }
+}
+
+async function newTransaction(defaultAccountId, onDone) {
+  if (!state.bank.accounts.length) { toast('Create an account first.', true); return; }
+  const accOptions = state.bank.accounts.map((a) => [a.id, accountLabel(a)]);
+  const result = await modalForm({
+    title: 'New transaction', iconName: 'fa-right-left', submitLabel: 'Record',
+    fields: [
+      { key: 'account_id', label: 'Account', type: 'select', options: accOptions, value: defaultAccountId || accOptions[0][0] },
+      { key: 'type', label: 'Type', type: 'select', options: [['deposit', 'Deposit'], ['withdrawal', 'Withdrawal'], ['transfer', 'Transfer']] },
+      { key: 'to_account_id', label: 'To account', type: 'select', options: accOptions, show: (v) => v.type === 'transfer' },
+      { key: 'amount', label: 'Amount', type: 'number', attrs: { min: 0.01, step: '0.01' } },
+      { key: 'description', label: 'Note (optional)' },
+    ],
+    onSubmit: async (v) => {
+      const json = { account_id: v.account_id, type: v.type, amount: Number(v.amount), description: v.description || null };
+      if (v.type === 'transfer') json.to_account_id = v.to_account_id;
+      const t = await api('/api/banking/transactions', { method: 'POST', json });
+      toast(`${v.type[0].toUpperCase() + v.type.slice(1)} of ${money(t.amount)} recorded.`);
+    },
+  });
+  if (result) onDone();
+}
+
+async function renderLoans(body) {
+  const newBtn = el('button', { className: 'btn btn-primary', type: 'button' }, icon('fa-plus'), ' New loan');
+  const toolbar = el('div', { className: 'toolbar' }, el('span', { className: 'spacer' }), newBtn);
+  const tableWrap = el('div', { className: 'admin-body' });
+  body.replaceChildren(toolbar, tableWrap);
+  const isAdmin = state.user.role === 'admin';
+
+  const paint = (list) => tableWrap.replaceChildren(!list.length ? el('div', { className: 'empty', textContent: 'No loans yet.' }) :
+    table(['Customer', 'Type', 'Principal', 'Rate', 'Tenure', 'EMI', 'Status'], list.map((l) => {
+      const statusCell = isAdmin
+        ? el('select', { className: 'sel' }, ...['pending', 'approved', 'rejected', 'closed'].map((s) => el('option', { value: s, textContent: s[0].toUpperCase() + s.slice(1) })))
+        : null;
+      if (statusCell) {
+        statusCell.value = l.status;
+        statusCell.onchange = async () => {
+          try { await api(`/api/banking/loans/${l.id}`, { method: 'PATCH', json: { status: statusCell.value } }); toast('Loan status updated.'); }
+          catch (err) { statusCell.value = l.status; toast(err.message, true); }
+        };
+      }
+      return el('tr', {},
+        el('td', { textContent: customerLabel(l.customer_id) }), el('td', { textContent: l.loan_type }),
+        el('td', { textContent: money(l.principal) }), el('td', { textContent: l.interest_rate + '%' }),
+        el('td', { textContent: l.tenure_months + ' mo' }), el('td', { textContent: money(l.emi) }),
+        el('td', {}, statusCell || statusBadgeFor(l.status)));
+    })));
+
+  const load = async () => {
+    const list = await api('/api/banking/loans');
+    state.bank.loans = list;
+    paint(list);
+  };
+  if (state.bank.loans) paint(state.bank.loans);
+  else tableWrap.replaceChildren(el('div', { className: 'empty', textContent: 'Loading…' }));
+  newBtn.onclick = () => newLoan(load);
+
+  if (!state.bank.customers.length) {
+    state.bank.customers = await api('/api/banking/customers');
+    if (state.bank.loans) paint(state.bank.loans); // repaint now that customer names are known
+  }
+  await load();
+}
+
+async function newLoan(onDone) {
+  if (!state.bank.customers.length) { toast('Create a customer first.', true); return; }
+  const result = await modalForm({
+    title: 'New loan', iconName: 'fa-hand-holding-dollar', submitLabel: 'Submit',
+    fields: [
+      { key: 'customer_id', label: 'Customer', type: 'select', options: state.bank.customers.map((c) => [c.id, `${c.customer_code} — ${c.full_name}`]) },
+      { key: 'loan_type', label: 'Loan type', type: 'select', options: state.bank.meta.loanTypes.map((t) => [t, t]) },
+      { key: 'principal', label: 'Principal amount', type: 'number', attrs: { min: 1, step: '0.01' } },
+      { key: 'interest_rate', label: 'Interest rate (% p.a.)', type: 'number', attrs: { min: 0.1, max: 36, step: '0.1' }, value: '9.5' },
+      { key: 'tenure_months', label: 'Tenure (months)', type: 'number', attrs: { min: 1, max: 360, step: '1' }, value: '60' },
+    ],
+    onSubmit: async (v) => {
+      const l = await api('/api/banking/loans', {
+        method: 'POST',
+        json: { customer_id: v.customer_id, loan_type: v.loan_type, principal: Number(v.principal), interest_rate: Number(v.interest_rate), tenure_months: Number(v.tenure_months) },
+      });
+      toast(`Loan submitted. EMI ${money(l.emi)}/month.`);
+    },
+  });
+  if (result) onDone();
+}
+
+async function renderCards(body) {
+  const newBtn = el('button', { className: 'btn btn-primary', type: 'button' }, icon('fa-plus'), ' New card');
+  const toolbar = el('div', { className: 'toolbar' }, el('span', { className: 'spacer' }), newBtn);
+  const tableWrap = el('div', { className: 'admin-body' });
+  body.replaceChildren(toolbar, tableWrap);
+  const isAdmin = state.user.role === 'admin';
+
+  const paint = (list) => tableWrap.replaceChildren(!list.length ? el('div', { className: 'empty', textContent: 'No cards yet.' }) :
+    table(['Card number', 'Type', 'Account', 'Expiry', 'Status'], list.map((c) => {
+      const account = state.bank.accounts.find((a) => a.id === c.account_id);
+      const statusCell = isAdmin
+        ? el('select', { className: 'sel' }, ...['active', 'frozen', 'blocked'].map((s) => el('option', { value: s, textContent: s[0].toUpperCase() + s.slice(1) })))
+        : null;
+      if (statusCell) {
+        statusCell.value = c.status;
+        statusCell.onchange = async () => {
+          try { await api(`/api/banking/cards/${c.id}`, { method: 'PATCH', json: { status: statusCell.value } }); toast('Card status updated.'); }
+          catch (err) { statusCell.value = c.status; toast(err.message, true); }
+        };
+      }
+      return el('tr', {},
+        el('td', { className: 'nowrap', textContent: c.card_number }), el('td', { textContent: c.card_type }),
+        el('td', { textContent: account ? account.account_number : c.account_id }), el('td', { textContent: c.expiry }),
+        el('td', {}, statusCell || statusBadgeFor(c.status)));
+    })));
+
+  const load = async () => {
+    const list = await api('/api/banking/cards');
+    state.bank.cards = list;
+    paint(list);
+  };
+  if (state.bank.cards) paint(state.bank.cards);
+  else tableWrap.replaceChildren(el('div', { className: 'empty', textContent: 'Loading…' }));
+  newBtn.onclick = () => newCard(load);
+
+  if (!state.bank.accounts.length) {
+    state.bank.accounts = await api('/api/banking/accounts');
+    if (state.bank.cards) paint(state.bank.cards); // repaint now that account numbers are known
+  }
+  await load();
+}
+
+async function newCard(onDone) {
+  if (!state.bank.accounts.length) { toast('Create an account first.', true); return; }
+  const result = await modalForm({
+    title: 'New card', iconName: 'fa-credit-card', submitLabel: 'Issue',
+    fields: [
+      { key: 'account_id', label: 'Account', type: 'select', options: state.bank.accounts.map((a) => [a.id, accountLabel(a)]) },
+      { key: 'card_type', label: 'Card type', type: 'select', options: state.bank.meta.cardTypes.map((t) => [t, t]) },
+    ],
+    onSubmit: async (v) => { await api('/api/banking/cards', { method: 'POST', json: v }); toast('Card issued.'); },
+  });
+  if (result) onDone();
+}
+
+function openAdmin() {
+  const body = el('div', { className: 'admin-body' });
+  const views = [['Users', () => adminUsers(body)], ['Audit log', () => adminAudit(body, false)], ['Unanswered questions', () => adminAudit(body, true)]];
+  const tabs = views.map(([name, show]) => {
+    const tab = el('button', { type: 'button', textContent: name });
+    tab.onclick = async () => {
+      tabs.forEach((t) => t.classList.toggle('active', t === tab));
+      body.replaceChildren(el('div', { className: 'empty', textContent: 'Loading…' }));
+      try { await show(); } catch (err) { body.replaceChildren(el('div', { className: 'empty', textContent: err.message })); }
+    };
+    return tab;
+  });
+  const closeBtn = el('button', { className: 'icon-btn', type: 'button', title: 'Close' }, icon('fa-xmark'));
+  const overlay = el('div', { className: 'admin-overlay' }, el('div', { className: 'admin-card' },
+    el('div', { className: 'admin-head' }, icon('fa-user-shield'), el('h2', { textContent: 'Administration' }), closeBtn),
+    el('div', { className: 'admin-tabs' }, ...tabs), body));
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  closeBtn.onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  document.addEventListener('keydown', onKey);
+  document.body.append(overlay);
+  tabs[0].click();
+}
+$('adminBtn').onclick = openAdmin;
+
+function fillChoices(h) {
+  state.departments = h.departments;
+  state.bank.meta = {
+    branches: h.branches || [], accountTypes: h.account_types || [], loanTypes: h.loan_types || [],
+    cardTypes: h.card_types || [], currency: h.currency || 'INR',
+  };
+  const options = (items) => items.map(([value, text]) => el('option', { value, textContent: text }));
+  $('department').replaceChildren(...options(h.departments.map((d) => [d, d])));
+  $('pubCategory').replaceChildren(...options(h.categories.map((c) => [c, c])));
+  $('pubReaders').replaceChildren(...options([['', 'All departments'], ...h.departments.map((d) => [d, d + ' only'])]));
+}
+
 // ---------- boot ----------
 (async function boot() {
   // The upload limit is configured on the server (MAX_UPLOAD_MB)
-  api('/api/health').then((h) => { if (h.max_upload_mb) state.maxUploadMb = h.max_upload_mb; $('maxMb').textContent = state.maxUploadMb; }).catch(() => {});
+  api('/api/health').then((h) => { if (h.max_upload_mb) state.maxUploadMb = h.max_upload_mb; $('maxMb').textContent = state.maxUploadMb; fillChoices(h); }).catch(() => {});
   if (!state.token) return showAuth();
   try { enterApp(await api('/api/auth/me')); }
   catch { showAuth(); }
