@@ -16,6 +16,12 @@ from .keyword_search import STOPWORDS
 CONFLICT = "conflict"
 NEEDS_REVIEW = "needs_review"
 
+# How much of what two sources disagree about must be what the question asked about. Two documents
+# that disagree with each other about something else ("run the compressor before shutdown") are not an
+# answer to this question ("how often is the air filter replaced"), so they are not reported here.
+# 0.6: the name of the machine alone is half of a two-word subject, and that is not enough.
+ON_TOPIC = 0.6
+
 # Written by the backend, never by a model
 CONFLICT_STATUS = "Status: Conflict unresolved."
 CONFLICT_ACTION = (
@@ -66,8 +72,12 @@ _UNIT = (
     r"°\s*c|(?:degrees?|deg)\s*(?:c|celsius)|n\s*[·.\-]?\s*m|"
     + "|".join(sorted((re.escape(u) for u in UNITS if u not in ("°c", "degc", "nm")), key=len, reverse=True))
 )
+# A quantity, with up to two words allowed between the number and its unit ("every 500 operating hours")
 _QUANTITY = re.compile(
-    rf"(?<![\w.,])(?P<a>{_NUM})(?:\s*(?:-|–|—|to)\s*(?P<b>{_NUM}))?\s*(?P<unit>{_UNIT})(?![\w])", re.IGNORECASE
+    # Each skipped word must be a whole word: without \b the engine splits "until" and reads "10 minutes
+    # until" as 10 litres.
+    rf"(?<![\w.,])(?P<a>{_NUM})(?:\s*(?:-|–|—|to)\s*(?P<b>{_NUM}))?(?:\s+[a-z][a-z-]*\b){{0,2}}\s*\b(?P<unit>{_UNIT})(?![\w])",
+    re.IGNORECASE,
 )
 _SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(])|[;\n]+")
 _WORD = re.compile(r"[^\W_]+(?:[-./_][^\W_]+)*")
@@ -77,6 +87,14 @@ _FILLER = frozenset(
     "must shall should never any all each every also only not no until before after then both about approximately "
     "least most more less than about around".split()
 )
+
+# Procedure verbs that fit almost any instruction. They are shown in the topic but do not make two
+# sentences the same instruction: "wait 10 minutes before opening the dryer cover" and "wait 5 minutes
+# before opening the drain plug" share only these, and are about different things.
+_GENERIC_WORDS = (
+    "wait allow open close remove replace change check inspect set run stop start exceed stay below above reach "
+    "hold give take use operate operating keep leave turn switch do make put"
+).split()
 
 # Operating conditions that make two instructions apply to different situations: word -> (group, name)
 QUALIFIERS = {
@@ -91,7 +109,7 @@ QUALIFIERS = {
 # What kind of quantity a question asks for. Without any of these cues every kind is compared.
 _ASKS = {
     "time": r"\bhow long\b|\bhow (?:many|much) (?:more )?(?:seconds|minutes|mins|hours|days|weeks)\b|\b(?:seconds|minutes|mins|hours|days|weeks)\b|\bhow often\b|\binterval\b|\bduration\b",
-    "pressure": r"\bwhat (?:\w+ ){0,2}pressure\b|\bhow much pressure\b|\bpressure (?:limit|setting|rating|reading)\b|\b(?:bar|psi|kpa|mpa)\b|\b(?:working|maximum|minimum|set|operating) pressure\b",
+    "pressure": r"\bpressure\b|\bgauge\b|\b(?:bar|psi|kpa|mpa)\b",
     "torque": r"\btorque\b|\bnm\b",
     "temperature": r"\btemperature\b|\bhow (?:hot|cold)\b|\bdegrees\b",
     "volume": r"\blit(?:re|er)s?\b|\bcapacity\b|\bhow much oil\b",
@@ -112,6 +130,9 @@ def _stem(word: str) -> str:
             word = word[: -len(suffix)]
             break
     return word[:-1] if len(word) > 4 and word.endswith("e") else word
+
+
+_GENERIC = frozenset(_stem(w) for w in _GENERIC_WORDS)
 
 
 def _number(text: str) -> float:
@@ -146,6 +167,8 @@ def extract_claims(text: str, question_stems: set[str]) -> list[dict]:
             continue
         words = [(m.start(), m.end(), m.group().lower()) for m in _WORD.finditer(sentence)]
         qualifiers = {QUALIFIERS[w][0]: QUALIFIERS[w][1] for _, _, w in words if w in QUALIFIERS}
+        # "degrees C", "psi", "N·m": a unit written out in words says nothing about what the sentence is about
+        quantities = [(m.start("unit"), m.end()) for m in _QUANTITY.finditer(sentence)]
         for match in _QUANTITY.finditer(sentence):
             unit = UNITS.get(_unit_key(match.group("unit")))
             if unit is None:
@@ -158,11 +181,11 @@ def extract_claims(text: str, question_stems: set[str]) -> list[dict]:
             if match.group("b") is None and low == 0:
                 # "reads 0 bar" states a reading, not a limit to compare
                 continue
-            before = [w for s, e, w in words if e <= match.start()][-8:]
-            after = [w for s, e, w in words if s >= match.end()][:8]
             anchor: dict[str, str] = {}
-            for w in before + after:
+            for start, end, w in words:
                 if w in QUALIFIERS or w in STOPWORDS or w in _FILLER or w in UNITS or _is_number(w):
+                    continue
+                if any(start >= s and end <= e for s, e in quantities):
                     continue
                 anchor.setdefault(_stem(w), w)
             display = f"{_fmt(low)}" + (f"–{_fmt(high)}" if high != low else "") + f" {label}"
@@ -173,6 +196,8 @@ def extract_claims(text: str, question_stems: set[str]) -> list[dict]:
                 "value": display,
                 "sentence": sentence,
                 "anchor": anchor,
+                # What this instruction is about, without the verbs that fit any instruction
+                "key": {s for s in anchor if s not in _GENERIC},
                 "qualifiers": qualifiers,
                 "passage_stems": passage_stems,
                 "relevance": len(question_stems & {_stem(w) for _, _, w in words}),
@@ -196,15 +221,32 @@ def _scopes_overlap(a: set[str], b: set[str]) -> bool:
     return not a or not b or bool(a & b)
 
 
-def _compare(a: dict, b: dict, question_qualifiers: dict[str, str]) -> tuple[str, list[str], float] | None:
+def _same_instruction(a: dict, b: dict) -> float | None:
+    """How alike two claims are, by the words that say what they are about; None if they are not comparable.
+
+    Only the distinguishing words count. A drain plug and a dryer cover share "wait" and "open", which
+    says nothing: without a shared subject the two sentences are different instructions.
+    """
+    shared = a["key"] & b["key"]
+    smaller = min(len(a["key"]), len(b["key"]))
+    if not shared or not smaller:
+        return None
+    match = len(shared) / smaller
+    # One word in common is only enough when it is the entire subject of the shorter sentence; "shutdown"
+    # alone links a compressor to a dryer.
+    if len(shared) < 2 and match < 1.0:
+        return None
+    return match if match >= settings.CONFLICT_MATCH_REVIEW else None
+
+
+def _compare(a: dict, b: dict, question_qualifiers: dict[str, str], question_key: set[str]) -> tuple[str, list[str], float] | None:
     """How two claims of different documents relate: (outcome, differences, match) or None if they do not clash."""
     if a["dimension"] != b["dimension"] or _same_value(a, b):
         return None
-    shared = set(a["anchor"]) & set(b["anchor"])
-    smaller = min(len(a["anchor"]), len(b["anchor"]))
-    match = len(shared) / smaller if smaller else 0.0
-    if len(shared) < 2 or match < settings.CONFLICT_MATCH_REVIEW:
+    match = _same_instruction(a, b)
+    if match is None:
         return None
+    shared = a["key"] & b["key"]
 
     issues: list[str] = []
     for group in set(a["qualifiers"]) | set(b["qualifiers"]):
@@ -218,7 +260,10 @@ def _compare(a: dict, b: dict, question_qualifiers: dict[str, str]) -> tuple[str
     if a["low"] <= b["high"] and b["low"] <= a["high"] and (a["low"] != a["high"] or b["low"] != b["high"]):
         issues.append("the values are overlapping ranges")
 
-    strong = match >= settings.CONFLICT_MATCH_STRONG and len(shared) >= 3
+    # Sure enough to call it a conflict: the question itself names everything the two sources have in
+    # common, or they are alike enough on their own (a terse sentence whose whole subject is shared).
+    on_topic = len(shared) >= 2 and shared <= question_key
+    strong = on_topic or (match >= settings.CONFLICT_MATCH_STRONG and (len(shared) >= 2 or match >= 1.0))
     return (CONFLICT if strong and not issues else NEEDS_REVIEW), issues, match
 
 
@@ -240,26 +285,21 @@ def detect(evidence: list[dict], question: str, focus_asset_ids: list[str] | Non
         QUALIFIERS[w][0]: QUALIFIERS[w][1] for w in _WORD.findall(question.lower()) if w in QUALIFIERS
     }
     focus = set(focus_asset_ids or [])
-    # A sentence must share enough words with the question to count as an answer to it
-    needed = max(2, min(3, len(question_stems)))
     # "At what pressure ...?" is not answered by a waiting time that happens to mention a valve
     asked = asked_dimensions(question)
+    question_key = {s for s in question_stems if s not in _GENERIC}
 
-    superseded, claims = [], []
-    seen_superseded = set()
+    old_claims: list[dict] = []
+    claims: list[dict] = []
     for item in evidence:
         if item["type"] != "document":
-            continue
-        if item.get("superseded"):
-            if item["document_id"] not in seen_superseded:
-                seen_superseded.add(item["document_id"])
-                superseded.append({"document_id": item["document_id"], "filename": item["filename"], "revision": item.get("revision")})
             continue
         assets = set(item.get("asset_ids") or [])
         if focus and assets and not (assets & focus):
             continue
         for claim in extract_claims(item["text"], question_stems):
-            if claim["relevance"] < needed or (asked and claim["dimension"] not in asked):
+            # A sentence must say something the question asks about, and be of the kind of quantity asked for
+            if not claim["relevance"] or (asked and claim["dimension"] not in asked):
                 continue
             # A sentence for a situation the question rules out is not an alternative answer
             if any(g in claim["qualifiers"] and claim["qualifiers"][g] != q for g, q in question_qualifiers.items()):
@@ -270,9 +310,26 @@ def detect(evidence: list[dict], question: str, focus_asset_ids: list[str] | Non
                 effective_date=item.get("effective_date"),
                 source=label_of(item) if label_of else item["filename"],
             )
+            into = old_claims if item.get("superseded") else claims
             key = (claim["document_id"], claim["sentence"].lower(), claim["value"])
-            if key not in {(c["document_id"], c["sentence"].lower(), c["value"]) for c in claims}:
-                claims.append(claim)
+            if key not in {(c["document_id"], c["sentence"].lower(), c["value"]) for c in into}:
+                into.append(claim)
+
+    # An old revision is mentioned only where it speaks to the same instruction as a current source,
+    # so an unrelated superseded document is not named in an answer it has nothing to do with
+    superseded, seen = [], set()
+    for old in old_claims:
+        current = next(
+            (c for c in claims if c["document_id"] != old["document_id"] and c["dimension"] == old["dimension"]
+             and _scopes_overlap(set(c["asset_ids"]), set(old["asset_ids"])) and _same_instruction(old, c) is not None
+             # and that instruction must be the question's own subject: two of its words were asked about.
+             # Otherwise a question about cooling a furnace names an old pump revision that also mentions cooling.
+             and len(old["key"] & c["key"] & question_key) >= 2),
+            None,
+        )
+        if current is not None and old["document_id"] not in seen:
+            seen.add(old["document_id"])
+            superseded.append({"document_id": old["document_id"], "filename": old["filename"], "revision": old["revision"]})
 
     # Edges between claims of different documents that clash; components of those edges are the findings
     edges: dict[int, set[int]] = {i: set() for i in range(len(claims))}
@@ -282,11 +339,11 @@ def detect(evidence: list[dict], question: str, focus_asset_ids: list[str] | Non
             b = claims[j]
             if a["document_id"] == b["document_id"] or not _scopes_overlap(set(a["asset_ids"]), set(b["asset_ids"])):
                 continue
-            result = _compare(a, b, question_qualifiers)
+            result = _compare(a, b, question_qualifiers, question_key)
             if result:
                 edges[i].add(j)
                 edges[j].add(i)
-                outcome[(i, j)] = (result[0], result[1])
+                outcome[(i, j)] = (result[0], result[1], a["key"] & b["key"])
 
     findings, visited = [], set()
     for start in edges:
@@ -301,8 +358,12 @@ def detect(evidence: list[dict], question: str, focus_asset_ids: list[str] | Non
         visited |= component
         pairs = [v for (i, j), v in outcome.items() if i in component and j in component]
         members = [claims[i] for i in sorted(component)]
-        kind = CONFLICT if any(k == CONFLICT for k, _ in pairs) else NEEDS_REVIEW
-        differences = sorted({d for _, ds in pairs for d in ds})
+        # What the sources disagree about must be what was asked, not something else they also differ on
+        disputed = set().union(*(words for _, _, words in pairs))
+        if len(disputed & question_key) / len(disputed) < ON_TOPIC:
+            continue
+        kind = CONFLICT if any(k == CONFLICT for k, _, _ in pairs) else NEEDS_REVIEW
+        differences = sorted({d for _, ds, _ in pairs for d in ds})
         shared = set.intersection(*(set(c["anchor"]) for c in members)) or set(members[0]["anchor"])
         topic = " ".join(w for s, w in members[0]["anchor"].items() if s in shared)
         notes = _notes(members)

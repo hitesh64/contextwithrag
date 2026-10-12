@@ -176,6 +176,48 @@ def test_units_are_normalised_and_numbers_without_units_are_not_claims():
     ]
 
 
+def test_a_unit_separated_from_its_number_is_read_but_never_from_inside_a_word():
+    """Found by the evaluation: "every 500 operating hours" was missed, and "10 minutes until" read as 10 litres."""
+    plan = detector.extract_claims("Replace the return filter every 500 operating hours.", set())
+    assert [(c["dimension"], c["low"], c["value"]) for c in plan] == [("time", 500 * 60, "500 hours")]
+
+    trap = detector.extract_claims("Wait 10 minutes until the gauge reads 0 bar before loosening the fitting.", set())
+    # "until" must not supply the "l" of litres, and a gauge reading of 0 is not an instruction
+    assert [(c["dimension"], c["low"]) for c in trap] == [("time", 10)]
+
+
+def test_the_subject_of_a_claim_excludes_units_written_as_words():
+    """Also from the evaluation: "degrees" and "C" counted as what the sentence was about."""
+    claim = detector.extract_claims("Hydraulic oil temperature must stay below 60 degrees C during operation.", set())[0]
+    assert "oil" in claim["key"] and "temperatur" in claim["key"]
+    assert not {"c", "degre", "degrees"} & claim["key"]
+
+
+def test_one_word_in_common_does_not_make_two_instructions_the_same(client, factory, fake_llm):
+    """A compressor and a dryer both mention "shutdown"; that is not a disagreement about the same step."""
+    factory.document("compressor.txt", b"Compressor manual. Before shutdown run the compressor for 5 minutes.")
+    factory.document("dryer.txt", b"Dryer SOP. Wait 60 minutes after shutdown before opening the dryer cover.")
+    fake_llm.reply = lambda prompt, system: f"Run it for 5 minutes [{number_of(prompt, 'compressor.txt')}]."
+    body = ask(client, factory.admin, "How long should the compressor run before shutdown?")
+    assert body["conflict"] is False and body["review_required"] is False and len(fake_llm.calls) == 1
+
+
+def test_an_old_revision_is_named_only_where_it_answers_the_same_question(client, factory, fake_llm):
+    """A question about cooling a furnace must not name an old pump revision that also mentions cooling."""
+    old = factory.document("pump_rev1.txt", b"Pump SOP revision 1. After stopping the pump wait 30 minutes for the casing to cool before removing the cover.")
+    new = factory.document("pump_rev2.txt", b"Pump SOP revision 2. After stopping the pump wait 45 minutes for the casing to cool before removing the cover.")
+    factory.document("furnace_a.txt", b"Furnace manual. Allow the furnace to cool for 2 hours before opening the door.")
+    assert patch_version(client, factory.admin, new, supersedes_document_id=old["id"]).status_code == 200
+
+    fake_llm.reply = lambda prompt, system: f"Wait 45 minutes [{number_of(prompt, 'pump_rev2.txt')}]."
+    pump = ask(client, factory.admin, "How long must I wait after stopping the pump before removing the cover?")
+    assert [s["filename"] for s in pump["superseded_sources"]] == ["pump_rev1.txt"]
+
+    fake_llm.reply = lambda prompt, system: f"Two hours [{number_of(prompt, 'furnace_a.txt')}]."
+    furnace = ask(client, factory.admin, "How long must the furnace cool before opening the door?")
+    assert furnace["superseded_sources"] == [] and furnace["conflict"] is False
+
+
 def test_another_organizations_documents_are_never_compared(client, factory, other_factory, fake_llm):
     factory.document("press_sop.txt", PRESS)
     other_factory.document("their_sop.txt", GENERAL)

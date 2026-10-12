@@ -1,11 +1,17 @@
 # Conflict detection: design and status
 
-**Status (12 October 2026):** build steps 1-3 are implemented and tested (`services/conflicts.py`,
+**Status (12 October 2026):** all four build steps are done. Measured results and the failures that
+changed the design are in `docs/evaluation.md` ("Conflict detection"); the rules below reflect what
+that evaluation forced, in particular that generic verbs ("wait", "open") do not make two sentences
+the same instruction and that a disagreement must be about what the question asked.
+
+Build steps 1-3 are implemented and tested (`services/conflicts.py`,
 `services/conflict_service.py`, `api/conflicts.py`, `PATCH /documents/{id}/version`, 13 tests in
-`backend/tests/test_conflict_detection.py`). Step 4, the model evaluation with conflict recall and
-false-alarm rate, is not done. Everything below was measured only on fake embeddings and small
-synthetic documents. On the 26 sample questions the detector flags q20 and no other question (retrieval
-with test embeddings, not Gemini).
+`backend/tests/test_conflict_detection.py`). Step 4 is done: 22 labelled cases
+(`backend/eval/conflict_cases.json`, corpus in `data/conflict_eval/`) run by
+`backend.eval.run_conflict_eval`, with conflict recall and false-alarm rate reported separately and
+the 25 labelled questions of the main set as a regression check. The results are fitted to those
+cases, because the detector was changed until they passed.
 
 Differences between this design and the code: a claim must also be about the kind of quantity the
 question asks for (a pressure question ignores waiting times), and share at least 2-3 words with the

@@ -1,6 +1,58 @@
 # Evaluation
 
-## Status on 12 October 2026: first baseline measured
+Two separate measurements, which must not be mixed:
+
+1. **The conflict detector** (below, "Conflict detection"). Deterministic, no model, so it can be
+   re-run at any time without quota.
+2. **The whole assistant** (retrieval + Gemini answers; the sections after it). Needs generation
+   quota, and its numbers are from one run per question on one small synthetic dataset.
+
+## Conflict detection, 12 October 2026
+
+22 labelled cases on a second synthetic corpus (26 documents, `data/conflict_eval/`) plus the 25
+own-organization questions of the main set as a regression check. The detector compares the
+retrieved passages itself; no answer is generated.
+
+```bash
+.venv\Scripts\python.exe -m backend.eval.run_conflict_eval                     # real embeddings
+.venv\Scripts\python.exe -m backend.eval.run_conflict_eval --fake-embeddings   # no quota at all
+```
+
+| Metric | Real embeddings | Fake embeddings | Cases |
+|---|---|---|---|
+| Conflicts found (two-way, three-way, paraphrased, unit-converted, conditions) | 11 / 11 | 11 / 11 | 11 |
+| False alarms (unrelated dimension, other machines, equal values, unrelated procedure, condition stated in the question) | 0 / 10 | 0 / 10 | 10 |
+| Old revision reported as superseded, and only on explicit metadata | 2 / 2 | 2 / 2 | 2 |
+| Labelled questions of the main set unchanged (q20 flagged, nothing else) | 25 / 25 | 25 / 25 | 25 |
+| Word-only disagreement found (outside what the detector compares) | 0 / 1 | 0 / 1 | 1 |
+
+**These numbers are fitted, not an independent measurement.** The cases and their expected results
+were written before the first run, but the detector was then changed until they passed, so the only
+honest reading is "it handles the 22 situations we thought of". The first run scored 5/11 recall and
+3/10 false alarms; what the failures showed, and what was changed:
+
+- `every 500 operating hours` was not read at all: the quantity had to be next to its unit. A
+  quantity may now be up to two words from its unit — which first introduced a worse bug, reading
+  `wait 10 minutes until` as 10 litres, because the pattern split the word "until".
+- `degrees` and `C` counted as part of what a sentence was about, so a temperature disagreement
+  looked off-topic. Words belonging to the unit are now excluded.
+- Unrelated procedures were compared because they shared only generic verbs: a dryer cover and a
+  gearbox drain plug both "wait" and "open". Those verbs no longer make two sentences the same
+  instruction, and one shared word is enough only when it is the whole subject of the shorter one.
+- A question about an air filter was answered with a conflict about running the compressor before
+  shutdown. What two sources disagree about must now be mostly what the question asked about.
+- A question about cooling a furnace named an old pump revision, because that revision also
+  mentions cooling. An old revision is now named only where it answers the same question.
+
+What this measurement does not cover: real manuals (these are short, clean, invented text), tables
+and scanned pages, Hindi or Marathi quantities, disagreements stated in words rather than numbers
+(1 case, found by neither configuration), and thresholds, which are still guesses — `ON_TOPIC = 0.6`
+rests on a single failing case. The detector's own logic is also covered by 17 automated tests in
+`backend/tests/test_conflict_detection.py`, which need no model and no quota.
+
+Per-case detail of the real-embedding run: `backend/eval/results/2026-10-12_conflict-detector_real-embeddings.json` (results are not in git; re-run the command above to regenerate).
+
+## The whole assistant: status on 12 October 2026, first baseline measured
 
 One run on the synthetic sample dataset (5 documents, 10 breakdown records, 26 labelled
 questions), embedding model `gemini-embedding-001`, 6 passages retrieved per question.
@@ -58,7 +110,7 @@ Per-question details of this run: `backend/eval/results/2026-10-12_*.json` (not 
 
 ## What the automated tests already establish
 
-These hold regardless of the model, because the backend enforces them (55 tests, all passing):
+These hold regardless of the model, because the backend enforces them (59 tests, all passing):
 
 - A user of one factory cannot read, cite, download, edit or delete another factory's assets,
   documents, breakdowns, work orders or audit events.
