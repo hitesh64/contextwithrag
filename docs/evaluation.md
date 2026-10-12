@@ -52,7 +52,36 @@ rests on a single failing case. The detector's own logic is also covered by 17 a
 
 Per-case detail of the real-embedding run: `backend/eval/results/2026-10-12_conflict-detector_real-embeddings.json` (results are not in git; re-run the command above to regenerate).
 
-## The whole assistant: status on 12 October 2026, first baseline measured
+## The whole assistant on one model: started 12 October 2026, not finished
+
+The run below was meant to replace the split-model baseline further down with all 26 questions
+on `gemini-2.5-flash`. The key's daily generation quota ended it early, so it is **incomplete**:
+
+| | Result |
+|---|---|
+| Retrieval (all 26, no generation needed): Recall@1 / @3 / @6 | 19 / 21, 21 / 21, 21 / 21 |
+| Cross-factory retrieval blocked | 1 / 1 |
+| Questions answered | 10 of 26 (8 by the model; q20 and q26 need no model call) |
+| Stopped by quota (HTTP 429) | 16: q06, q08, q10, q12-q19, q21-q25 |
+| Of the 9 answered questions with labelled sources: citation correct, all sources cited | 9 / 9, 9 / 9 |
+| Expected facts present (keyword check) | 8 / 9 |
+| Conflict flagged (q20, by the backend, no model call) | 1 / 1 |
+| Abstention, prompt injection | not measured: q21-q25 never ran |
+
+The one "facts" miss, q05, is the keyword check and not the answer: the answer says the spindle
+temperature "has exceeded 70 degrees C" with the right citation and the right five checks, but
+does not contain the labelled word "overheat".
+
+Nothing about abstention or prompt-injection resistance can be claimed from this run. To finish
+it, run the 16 missing questions on the same model when quota allows and merge; the merge
+refuses runs of different models:
+
+```bash
+.venv\Scripts\python.exe -m backend.eval.run_eval --answers --delay 13 --model gemini-2.5-flash --only q06,q08,q10,q12,q13,q14,q15,q16,q17,q18,q19,q21,q22,q23,q24,q25
+.venv\Scripts\python.exe -m backend.eval.run_eval --merge backend/eval/results/2026-10-12_flash_single-model_partial.json backend/eval/results/latest.json
+```
+
+## The whole assistant: status on 12 October 2026, first baseline measured (two models)
 
 One run on the synthetic sample dataset (5 documents, 10 breakdown records, 26 labelled
 questions), embedding model `gemini-embedding-001`, 6 passages retrieved per question.

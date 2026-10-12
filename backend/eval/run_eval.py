@@ -3,6 +3,7 @@
     python -m backend.eval.run_eval                 retrieval only: Recall@k (embedding calls, no generation quota)
     python -m backend.eval.run_eval --answers       also ask the model: citations, abstention, facts, latency
     python -m backend.eval.run_eval --answers --only q05,q21 --delay 13
+    python -m backend.eval.run_eval --merge results/a.json results/b.json    one report from runs split by quota
 
 It runs against an in-memory database and a temporary vector index filled with the synthetic
 sample dataset, with the real Gemini embedding and generation models, and never touches the
@@ -45,7 +46,10 @@ def main() -> None:
     parser.add_argument("--only", default="", help="comma-separated question ids")
     parser.add_argument("--delay", type=float, default=5.0, help="seconds between model calls (free keys allow few per minute)")
     parser.add_argument("--model", default="gemini-2.5-flash-lite", help="generation model for --answers")
+    parser.add_argument("--merge", nargs="+", metavar="RESULT.json", help="combine earlier runs of one model into results/merged.json; runs nothing")
     args = parser.parse_args()
+    if args.merge:
+        return merge(args.merge)
 
     # Must be set before the application is imported
     tmp = tempfile.mkdtemp(prefix="contextbasedrag_eval_")
@@ -125,6 +129,12 @@ def main() -> None:
             print(f"  {q['id']} {q['kind']:<18} evidence={row['evidence']:<2} "
                   + " ".join(f"{k}={v}" for k, v in row.items() if k.endswith("_ok") or k in ("recall", "abstained", "error", "injection_resisted")))
 
+    summary = summarize(rows, settings.EMBEDDING_MODEL, settings.RETRIEVAL_K, args.model if args.answers else None)
+    write(summary, rows)
+
+
+def summarize(rows: list[dict], embedding_model: str, retrieval_k: int, generation_model: str | None) -> dict:
+    """The figures of a run; generation_model None means retrieval only."""
     def rate(key: str, among=lambda r: True) -> dict | None:
         scored = [r for r in rows if key in r and among(r)]
         if not scored:
@@ -135,18 +145,18 @@ def main() -> None:
     labelled = [r for r in rows if "recall" in r]
     summary = {
         "questions": len(rows),
-        "embedding_model": settings.EMBEDDING_MODEL,
-        "retrieval_k": settings.RETRIEVAL_K,
+        "embedding_model": embedding_model,
+        "retrieval_k": retrieval_k,
         "recall_at_k": {
             str(k): {"passed": sum(r["recall"][str(k)] for r in labelled), "of": len(labelled),
                      "rate": round(sum(r["recall"][str(k)] for r in labelled) / len(labelled), 3)} for k in KS
         } if labelled else None,
         "cross_organization_blocked": rate("no_evidence_ok"),
     }
-    if args.answers:
+    if generation_model:
         answered = [r for r in rows if "latency_s" in r and "error" not in r]
         summary.update({
-            "generation_model": args.model,
+            "generation_model": generation_model,
             "model_errors": sum(1 for r in rows if "error" in r),
             "abstention_correct": rate("abstention_ok"),
             "abstained_when_no_answer_exists": rate("abstention_ok", lambda r: r["kind"] in ("no_answer", "unknown_asset", "cross_organization")),
@@ -161,12 +171,40 @@ def main() -> None:
                 "max": max(r["latency_s"] for r in answered),
             } if answered else None,
         })
+    return summary
 
+
+def write(summary: dict, rows: list[dict], name: str = "latest.json") -> None:
     out = HERE / "results"
     out.mkdir(exist_ok=True)
-    (out / "latest.json").write_text(json.dumps({"summary": summary, "rows": rows}, indent=2, default=str), encoding="utf-8")
+    (out / name).write_text(json.dumps({"summary": summary, "rows": rows}, indent=2, default=str), encoding="utf-8")
     print("\nSUMMARY\n" + json.dumps(summary, indent=2))
-    print(f"\nDetails: {out / 'latest.json'}")
+    print(f"\nDetails: {out / name}")
+
+
+def merge(paths: list[str]) -> None:
+    """One report from several runs of the same model, e.g. when a daily quota ended a run early.
+
+    Per question the first answer without a model error is kept; files are read in the order given.
+    Runs of different generation models, embedding models or retrieval depths are refused: their
+    figures are not one benchmark.
+    """
+    runs = [json.loads(Path(p).read_text(encoding="utf-8")) for p in paths]
+    for key in ("generation_model", "embedding_model", "retrieval_k"):
+        values = {run["summary"].get(key) for run in runs}
+        if len(values) != 1:
+            raise SystemExit(f"These runs differ in {key} ({', '.join(map(str, values))}) and cannot be merged into one benchmark.")
+    rows: dict[str, dict] = {}
+    for run in runs:
+        for row in run["rows"]:
+            kept = rows.get(row["id"])
+            if kept is None or ("error" in kept and "error" not in row):
+                rows[row["id"]] = row
+    ordered = sorted(rows.values(), key=lambda r: r["id"])
+    first = runs[0]["summary"]
+    summary = summarize(ordered, first["embedding_model"], first["retrieval_k"], first.get("generation_model"))
+    summary["merged_from"] = [Path(p).name for p in paths]
+    write(summary, ordered, "merged.json")
 
 
 if __name__ == "__main__":
