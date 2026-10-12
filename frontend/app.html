@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>ContextBasedRAG</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <!-- Signed out -->
+  <main id="auth" class="auth" hidden>
+    <div class="login-rings" aria-hidden="true"></div>
+    <div class="login-floor" aria-hidden="true"></div>
+    <div class="login-rail" aria-hidden="true">Manuals · SOPs · Breakdowns · Work orders</div>
+    <div class="tagline login-tagline" aria-hidden="true"><span>Answers</span><span>from your</span><span>own records</span></div>
+
+    <section class="auth-card">
+      <div class="wordmark" aria-hidden="true">ContextBasedRAG</div>
+      <h1><span class="sr-only">ContextBasedRAG: </span>Sign in to continue</h1>
+      <p class="muted">Maintenance answers from your factory's own manuals, SOPs and breakdown records.</p>
+
+      <div id="swipe" class="swipe">
+        <span class="swipe-text">Swipe to sign in</span>
+        <button class="swipe-thumb" id="swipe-thumb" type="button" aria-label="Swipe, or press Enter, to open the sign-in form"><i class="fa-solid fa-arrow-right"></i></button>
+      </div>
+
+      <div id="auth-forms" hidden>
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-auth-tab="login" type="button">Sign in</button>
+          <button class="tab" data-auth-tab="register" type="button">Register a factory</button>
+        </div>
+        <form id="login-form">
+          <label>Email <input name="email" type="email" required autocomplete="username"></label>
+          <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+          <div class="auth-actions">
+            <button class="btn" type="button" data-swipe-back><i class="fa-solid fa-arrow-left"></i>Back</button>
+            <button class="btn primary" type="submit">Sign in</button>
+          </div>
+        </form>
+        <form id="register-form" hidden>
+          <label>Factory / company name <input name="organization_name" required minlength="2" maxlength="100"></label>
+          <label>Your name <input name="name" required minlength="2" maxlength="80"></label>
+          <label>Email <input name="email" type="email" required autocomplete="username"></label>
+          <label>Password <input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
+          <p class="hint">You become the administrator of this factory and can add your team afterwards.</p>
+          <div class="auth-actions">
+            <button class="btn" type="button" data-swipe-back><i class="fa-solid fa-arrow-left"></i>Back</button>
+            <button class="btn primary" type="submit">Create workspace</button>
+          </div>
+        </form>
+      </div>
+      <p id="auth-error" class="error" role="alert"></p>
+    </section>
+  </main>
+
+  <!-- Signed in -->
+  <div id="app" class="app" hidden>
+    <header class="hdr" id="hdr">
+      <div class="hdr-deco" aria-hidden="true">
+        <span class="orb orb-1"></span><span class="orb orb-2"></span>
+        <svg class="circuit" viewBox="0 0 520 100" preserveAspectRatio="xMaxYMid slice">
+          <path d="M0 62h70l18-30h60l16 28h84l18-32h72l14 24h168"/>
+          <path d="M40 88h96l14-22h110l16 26h120l12-18h112"/>
+          <path d="M210 8l14 8v16l-14 8-14-8V16zM372 44l12 7v14l-12 7-12-7V51z"/>
+        </svg>
+        <span class="spotlight" id="spotlight"></span>
+      </div>
+
+      <button class="hamburger" id="menu-open" type="button" aria-label="Open menu" aria-controls="sidebar"><i class="fa-solid fa-bars"></i></button>
+
+      <a class="hdr-brand" href="#/dashboard" aria-label="ContextBasedRAG: dashboard">
+        <span class="wordmark">ContextBasedRAG</span>
+        <span class="hdr-sub">Factory maintenance intelligence</span>
+      </a>
+
+      <!-- Slideshow slot: no photos in this project yet, so three gradient placeholders -->
+      <div class="hdr-show" aria-hidden="true">
+        <div class="slides">
+          <div class="slide slide-1"><i class="fa-solid fa-industry"></i></div>
+          <div class="slide slide-2"><i class="fa-solid fa-book-open"></i></div>
+          <div class="slide slide-3"><i class="fa-solid fa-screwdriver-wrench"></i></div>
+        </div>
+        <div class="dots"><span></span><span></span><span></span></div>
+      </div>
+
+      <div class="hdr-controls">
+        <form class="hdr-field hdr-search" id="hdr-search" role="search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="hdr-search-input" name="q" type="search" placeholder="Search assets…" aria-label="Search assets" autocomplete="off">
+          <kbd>Ctrl K</kbd>
+        </form>
+        <a class="hdr-field hdr-chip" href="#/dashboard" title="Open the dashboard of this factory">
+          <i class="fa-solid fa-folder-open"></i>
+          <span class="chip-label">Factory</span>
+          <b id="org-name"></b>
+          <i class="fa-solid fa-arrow-right chip-arrow"></i>
+        </a>
+      </div>
+
+      <div class="tagline hdr-tagline" aria-hidden="true"><span>Answers</span><span>from your</span><span>own records</span></div>
+    </header>
+    <div class="drl drl-h" aria-hidden="true"></div>
+
+    <aside class="sidebar" id="sidebar">
+      <div class="side-top">
+        <button class="menu-toggle" id="rail-toggle" type="button" aria-label="Collapse or expand the menu (Ctrl+B)"><i class="fa-solid fa-bars"></i><span>Menu</span></button>
+      </div>
+      <nav id="nav" aria-label="Main"></nav>
+      <div class="who">
+        <div class="avatar" id="who-avatar" aria-hidden="true"></div>
+        <div class="who-text">
+          <div class="who-name" id="who-name"></div>
+          <div class="who-role" id="who-role"></div>
+        </div>
+        <button class="icon-btn" id="sign-out" type="button" aria-label="Sign out" title="Sign out"><i class="fa-solid fa-right-from-bracket"></i></button>
+      </div>
+      <div class="drl drl-v" aria-hidden="true"></div>
+    </aside>
+    <div class="drawer-backdrop" id="drawer-backdrop"></div>
+
+    <div class="main">
+      <main id="page" class="content-area" aria-live="polite"></main>
+    </div>
+  </div>
+
+  <div id="toast" class="toasts" role="status"></div>
+  <div id="rail-tip" class="rail-tip" role="tooltip" hidden></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+  <script src="/static/js/app.js" defer></script>
+</body>
+</html>

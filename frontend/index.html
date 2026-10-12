@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ContextBasedRAG — Factory Intelligence & Maintenance Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* Same design system as the application (frontend/css/app.css) */
+    :root {
+      --font: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+      --bg-page: #ffffff;
+      --bg-secondary: #f8fafc;
+      --bg-tertiary: #f1f5f9;
+      --ink: #1a2233;
+      --ink-strong: #0f172a;
+      --ink-soft: #5b6472;
+      --ink-mute: #8b93a1;
+      --line: rgba(15, 23, 42, 0.08);
+      --line-soft: rgba(15, 23, 42, 0.05);
+      --border: #e2e8f0;
+      --brand: #2563eb;
+      --brand-hover: #1d4ed8;
+      --brand-light: rgba(37, 99, 235, 0.10);
+      --indigo: #4f46e5;
+      --violet: #7c3aed;
+      --green: #16a34a;
+      --maroon: #be123c;
+      --shadow-card: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px -16px rgba(15, 23, 42, .28);
+      --shadow-kpi: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 20px -12px rgba(15, 23, 42, .14);
+      --spring: cubic-bezier(.34, 1.56, .64, 1);
+      --text-muted: var(--ink-soft);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-page);
+      color: var(--ink);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.5;
+      letter-spacing: -0.006em;
+      -webkit-font-smoothing: antialiased;
+      font-variant-numeric: tabular-nums;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    :focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px 24px; width: 100%; flex: 1; display: flex; flex-direction: column; }
+
+    /* Header: the sky band */
+    header {
+      display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+      margin: 0 -24px; padding: 20px 28px 20px 26px;
+      background:
+        radial-gradient(55% 170% at 90% 0%, rgba(196, 181, 253, .6) 0%, transparent 62%),
+        radial-gradient(40% 130% at 32% 125%, rgba(191, 219, 254, .9) 0%, transparent 62%),
+        linear-gradient(100deg, #f8fbff 0%, #eaf1ff 28%, #dfe7ff 55%, #d9dcfd 72%, #e4dcff 88%, #ece4ff 100%);
+      border: 1px solid rgba(99, 102, 241, .16); border-top: 0;
+      border-radius: 0 0 18px 18px;
+      box-shadow: 0 8px 22px -14px rgba(49, 46, 129, .45);
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
+    .logo-badge {
+      width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #6366f1, #7c3aed);
+      box-shadow: 0 6px 14px -8px rgba(79, 70, 229, .8);
+    }
+    .logo-badge svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 2; }
+    .brand-text h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--maroon); }
+    .brand-text p { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #1e3a5f; }
+
+    .nav-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .live-status {
+      display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 14px;
+      background: rgba(22, 163, 74, .1); color: var(--green); font-size: 12px; font-weight: 600;
+    }
+    .ping-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; position: relative; }
+    .ping-dot::after {
+      content: ''; position: absolute; top: -2px; left: -2px; width: 12px; height: 12px;
+      background: var(--green); border-radius: 50%; opacity: .75;
+      animation: ping 1.8s cubic-bezier(0, 0, .2, 1) infinite;
+    }
+    @keyframes ping { 75%, 100% { transform: scale(2.2); opacity: 0; } }
+
+    /* Hero */
+    .hero { padding: 56px 0 40px; text-align: center; max-width: 840px; margin: 0 auto; }
+    .pill-tag {
+      display: inline-block; padding: 4px 12px; border-radius: 14px; margin-bottom: 18px;
+      background: var(--brand-light); color: var(--brand);
+      font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    }
+    .hero-title { font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 14px; color: var(--ink-strong); }
+    .hero-subtitle { font-size: 15px; color: var(--ink-soft); margin: 0 auto 28px; max-width: 680px; }
+    .cta-group { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+
+    /* Buttons: light sweep + spring lift */
+    .btn {
+      position: relative; overflow: hidden;
+      display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px;
+      border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink-soft);
+      font: 500 13px/1.5 var(--font); text-decoration: none; cursor: pointer;
+      transition: background .18s ease, border-color .18s ease, color .18s ease, transform .28s var(--spring), box-shadow .28s var(--spring);
+    }
+    .btn::before {
+      content: ''; position: absolute; top: 0; bottom: 0; left: -150%; width: 55%; transform: skewX(-18deg); pointer-events: none;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .75), transparent);
+    }
+    .btn:hover::before, .btn:focus-visible::before { left: 150%; transition: left .6s ease; }
+    .btn:hover { transform: translateY(-2px) scale(1.015); box-shadow: 0 10px 24px -8px rgba(15, 23, 42, .30), 0 2px 6px -2px rgba(15, 23, 42, .18); }
+    .btn:active { transform: translateY(0); box-shadow: 0 3px 8px -4px rgba(15, 23, 42, .3); }
+    .btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+    .btn-primary:hover { background: var(--brand-hover); border-color: var(--brand-hover); }
+    .btn-secondary:hover { background: var(--bg-secondary); color: var(--ink); }
+
+    /* Feature cards, in the KPI-card style */
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 8px; }
+    .card {
+      --tone: #2563eb; --tone-bg: rgba(37, 99, 235, .10); --tone-wash: rgba(37, 99, 235, .07); --tone-line: rgba(37, 99, 235, .35);
+      position: relative; overflow: hidden; padding: 16px 18px; border-radius: 12px; border: 1px solid #e6ebf3;
+      background: radial-gradient(120% 95% at 100% 100%, var(--tone-wash), transparent 62%), linear-gradient(180deg, #fff, #fbfcfe);
+      box-shadow: var(--shadow-kpi);
+      transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
+    }
+    .card:nth-child(2) { --tone: #d97706; --tone-bg: rgba(217, 119, 6, .10); --tone-wash: rgba(217, 119, 6, .07); --tone-line: rgba(217, 119, 6, .35); }
+    .card:nth-child(3) { --tone: #7c3aed; --tone-bg: rgba(124, 58, 237, .10); --tone-wash: rgba(124, 58, 237, .07); --tone-line: rgba(124, 58, 237, .35); }
+    .card:nth-child(4) { --tone: #16a34a; --tone-bg: rgba(22, 163, 74, .10); --tone-wash: rgba(22, 163, 74, .07); --tone-line: rgba(22, 163, 74, .35); }
+    .card:nth-child(5) { --tone: #0d9488; --tone-bg: rgba(13, 148, 136, .10); --tone-wash: rgba(13, 148, 136, .07); --tone-line: rgba(13, 148, 136, .35); }
+    .card:nth-child(6) { --tone: #4f46e5; --tone-bg: rgba(79, 70, 229, .10); --tone-wash: rgba(79, 70, 229, .07); --tone-line: rgba(79, 70, 229, .35); }
+    .card:hover { transform: translateY(-3px); border-color: var(--tone-line); box-shadow: 0 18px 34px -16px var(--tone-line); }
+    .card-icon { width: 36px; height: 36px; border-radius: 10px; background: var(--tone-bg); display: flex; align-items: center; justify-content: center; margin-bottom: 10px; font-size: 17px; }
+    .card-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #334155; margin-bottom: 6px; transition: color .25s ease; }
+    .card:hover .card-title { color: var(--tone); }
+    .card-desc { color: #475569; font-size: 13px; line-height: 1.55; margin-bottom: 14px; }
+    .card-meta { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--line-soft); padding-top: 10px; font-size: 11px; color: var(--ink-mute); font-weight: 600; text-transform: uppercase; letter-spacing: .09em; }
+    .endpoint-tag { font-family: var(--font-mono); text-transform: none; letter-spacing: 0; font-weight: 500; background: var(--bg-tertiary); padding: 2px 8px; border-radius: 6px; color: var(--indigo); }
+
+    /* Diagnostic panel */
+    .status-panel { margin-top: 18px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-card); overflow: hidden; }
+    .status-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 18px; border-bottom: 1px solid var(--line-soft); }
+    .status-header h3 { font-size: 14px; font-weight: 600; }
+    .terminal-box { margin: 16px 18px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-strong); white-space: pre-wrap; overflow-x: auto; max-height: 240px; }
+
+    footer { margin-top: auto; padding: 32px 0 8px; text-align: center; color: var(--ink-mute); font-size: 12px; }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f8fafc; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+    @media (max-width: 980px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero-title { font-size: 32px; } }
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: 1fr; }
+      .hero { padding: 36px 0 28px; } .hero-title { font-size: 26px; }
+      .cta-group .btn { width: 100%; justify-content: center; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      .btn:hover, .card:hover { transform: none; }
+    }
+</style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <a href="/" class="brand">
+        <div class="logo-badge">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
+        <div class="brand-text">
+          <h1>ContextBasedRAG</h1>
+          <p>Factory Maintenance & Operations Intelligence</p>
+        </div>
+      </a>
+      <div class="nav-actions">
+        <div id="healthBadge" class="live-status">
+          <span class="ping-dot"></span>
+          <span id="healthStatusText">System Active</span>
+        </div>
+        <a href="/docs" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Interactive API Docs</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="pill-tag">Automated Factory RAG Platform</div>
+        <h2 class="hero-title">Intelligent Industrial Asset & Breakdown RAG</h2>
+        <p class="hero-subtitle">
+          Modular backend powered by FastAPI, ChromaDB hybrid vector retrieval, and Google Gemini.
+          Troubleshoot incidents, manage equipment lifecycle, and dispatch work orders with full context grounding.
+        </p>
+        <div class="cta-group">
+          <a href="/docs" class="btn btn-primary" id="openDocsBtn">
+            Explore Swagger API Docs →
+          </a>
+          <a href="/redoc" class="btn btn-secondary" id="openRedocBtn">
+            ReDoc Specifications
+          </a>
+          <button class="btn btn-secondary" id="checkHealthBtn" onclick="fetchHealth()">
+            Verify Server Health
+          </button>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="card">
+          <div class="card-icon">🏭</div>
+          <h3 class="card-title">Asset Registry</h3>
+          <p class="card-desc">Comprehensive tracking of factory machinery, criticalities, installation timestamps, and associated work logs.</p>
+          <div class="card-meta">
+            <span class="endpoint-tag">/api/v1/assets</span>
+            <span>REST API</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">⚡</div>
+          <h3 class="card-title">Breakdown Incident Logs</h3>
+          <p class="card-desc">Machine downtime tracking, symptom documentation, severity categorization, and automated resolution workflows.</p>
+          <div class="card-meta">
+            <span class="endpoint-tag">/api/v1/breakdowns</span>
+            <span>REST API</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">📋</div>
+          <h3 class="card-title">Work Orders & Dispatch</h3>
+          <p class="card-desc">Technician task assignment, approval cycles, parts tracking, and status progression from queued to completed.</p>
+          <div class="card-meta">
+            <span class="endpoint-tag">/api/v1/work-orders</span>
+            <span>REST API</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">📚</div>
+          <h3 class="card-title">Document Knowledge Base</h3>
+          <p class="card-desc">High-speed ingestion of equipment manuals, PDFs, and SOPs with hybrid BM25 + Gemini vector embeddings.</p>
+          <div class="card-meta">
+            <span class="endpoint-tag">/api/v1/documents</span>
+            <span>Hybrid RAG</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">🤖</div>
+          <h3 class="card-title">Factory AI Assistant</h3>
+          <p class="card-desc">Gemini-backed context engine answering questions strictly grounded in factory manuals and breakdown history.</p>
+          <div class="card-meta">
+            <span class="endpoint-tag">/api/v1/chat</span>
+            <span>Gemini RAG</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">🛡️</div>
+          <h3 class="card-title">Role-Based Auth & Audit</h3>
+          <p class="card-desc">Multi-tenant authentication with JWT tokens, operator/admin role enforcement, and auditable event tracing.</p>
+          <div class="card-meta">
+            <span class="endpoint-tag">/api/v1/auth</span>
+            <span>Security</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="status-panel">
+        <div class="status-header">
+          <h3>Server Diagnostic Console</h3>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">Real-time API response</span>
+        </div>
+        <div class="terminal-box" id="terminalOutput">
+          Checking /health endpoint...
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>ContextBasedRAG v1.0.0 &bull; Running on FastAPI &amp; Uvicorn &bull; MongoDB Atlas Connected</p>
+    </footer>
+  </div>
+
+  <script>
+    async function fetchHealth() {
+      const term = document.getElementById('terminalOutput');
+      const badgeText = document.getElementById('healthStatusText');
+      term.textContent = 'Calling /health at ' + new Date().toLocaleTimeString() + '...';
+      try {
+        const res = await fetch('/health');
+        const data = await res.json();
+        term.textContent = JSON.stringify(data, null, 2);
+        if (data.status === 'ok') {
+          badgeText.textContent = 'System Healthy';
+        }
+      } catch (err) {
+        term.textContent = 'Error connecting to /health: ' + err.message;
+        badgeText.textContent = 'Connecting...';
+      }
+    }
+    // Auto-ping on load
+    fetchHealth();
+  </script>
+</body>
+</html>
