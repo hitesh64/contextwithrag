@@ -187,42 +187,46 @@ def test_model_abstention_and_uncited_answers_are_not_presented_as_answers(clien
     assert unanswered["total"] == 3
 
 
-def test_conflicting_sources_are_reported_and_never_resolved(client, factory, fake_llm):
-    factory.document("press_sop.txt", b"Hydraulic press SOP. After opening the pressure release valve wait 10 minutes before loosening a fitting.")
-    factory.document("lockout_sop.txt", b"General lockout SOP. After opening the pressure release valve wait 5 minutes before loosening a fitting.")
-    question = "How long must I wait after opening the pressure release valve before loosening a fitting?"
+def number_of(prompt, filename):
+    return prompt.split(f'] Document "{filename}"')[0].rsplit("[", 1)[1]
 
-    def number_of(prompt, filename):
-        return prompt.split(f'] Document "{filename}"')[0].rsplit("[", 1)[1]
+
+def test_model_reported_conflict_uses_the_fixed_report_and_never_resolves(client, factory, fake_llm):
+    """A disagreement without numbers cannot be found by the backend; the model's CONFLICT marker is its only net."""
+    factory.document("press_sop.txt", b"Hydraulic press SOP. Before maintenance lock the main isolator with a padlock.")
+    factory.document("lockout_sop.txt", b"General lockout SOP. Before maintenance never lock the main isolator, only tag it.")
+    question = "Before maintenance, do I lock the main isolator?"
 
     def reply(prompt, system):
         a, b = number_of(prompt, "press_sop.txt"), number_of(prompt, "lockout_sop.txt")
-        return f"CONFLICT\nThe documents give different waiting times.\n- 10 minutes [{a}]\n- 5 minutes [{b}]"
+        return f"CONFLICT\nThe documents disagree about locking the isolator.\n- lock it with a padlock [{a}]\n- never lock it, only tag it [{b}]"
 
     fake_llm.reply = reply
     body = ask(client, factory.admin, question).json()
-    assert body["conflict"] is True and body["insufficient_evidence"] is False
+    assert len(fake_llm.calls) == 1 and body["conflict"] is True and body["insufficient_evidence"] is False
     assert {c["filename"] for c in body["citations"]} == {"press_sop.txt", "lockout_sop.txt"}
     answer = body["answer"]
-    assert "Source A: 10 minutes" in answer and "Source B: 5 minutes" in answer
+    assert "Source A: lock it with a padlock" in answer and "Source B: never lock it, only tag it" in answer
     # The file names, the status and the instruction to verify come from the backend, not from the model
     assert 'Document "press_sop.txt"' in answer and 'Document "lockout_sop.txt"' in answer
     assert "Status: Conflict unresolved." in answer and "qualified maintenance or safety supervisor" in answer
     assert "CONFLICT" not in answer
 
     # The marker is honoured when the model writes something before it
-    fake_llm.reply = lambda prompt, system: "5 minutes [1]\n\n" + reply(prompt, system)
+    fake_llm.reply = lambda prompt, system: "Lock it [1]\n\n" + reply(prompt, system)
     late = ask(client, factory.admin, question).json()
     assert late["conflict"] is True and late["answer"] == answer
 
     # A "conflict" that points at only one real source is not presented as one
-    fake_llm.reply = lambda prompt, system: f"CONFLICT\nDifferent times.\n- 10 minutes [{number_of(prompt, 'press_sop.txt')}]\n- 5 minutes [99]"
+    fake_llm.reply = lambda prompt, system: (
+        f"CONFLICT\nDifferent.\n- lock it [{number_of(prompt, 'press_sop.txt')}]\n- tag it [99]"
+    )
     single = ask(client, factory.admin, question).json()
     assert single["conflict"] is False and "Status: Conflict unresolved." not in single["answer"]
     assert [c["filename"] for c in single["citations"]] == ["press_sop.txt"]
 
     # An ordinary answer is not flagged
-    fake_llm.reply = lambda prompt, system: f"Wait 10 minutes [{number_of(prompt, 'press_sop.txt')}]."
+    fake_llm.reply = lambda prompt, system: f"Lock it [{number_of(prompt, 'press_sop.txt')}]."
     assert ask(client, factory.admin, question).json()["conflict"] is False
 
 

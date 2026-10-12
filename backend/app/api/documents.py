@@ -9,6 +9,7 @@ from ..core.config import settings
 from ..core.database import assets, documents
 from ..core.security import get_current_user, require_role
 from ..core.utils import clean, now, oid, paginate
+from ..schemas import DocumentVersionUpdate
 from ..services import audit_service, ingestion, retrieval
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -62,6 +63,11 @@ def upload_document(
         "size_bytes": len(data),
         "doc_type": doc_type,
         "asset_ids": linked,
+        # Version facts are unknown until a manager records them
+        "revision": None,
+        "effective_date": None,
+        "lifecycle": None,
+        "supersedes_document_id": None,
         "status": "queued",
         "error": None,
         "chunk_count": 0,
@@ -142,3 +148,29 @@ def delete_document(document_id: str, user: dict = Depends(require_role("mainten
     documents.delete_one({"_id": doc["_id"]})
     audit_service.record(user, "document.delete", "document", document_id, detail=doc["filename"])
     return None
+
+
+@router.patch("/{document_id}/version")
+def update_version(
+    document_id: str, body: DocumentVersionUpdate, user: dict = Depends(require_role("maintenance_manager"))
+):
+    """Record which revision a document is and whether it is superseded.
+
+    Only what a manager states here counts: an older upload or a file name never makes a document
+    "superseded". Naming `supersedes_document_id` marks that other document as superseded by this one.
+    """
+    org = user["organization_id"]
+    doc = get_document(org, document_id)
+    changes = body.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Nothing to change.")
+    if changes.get("effective_date") is not None:
+        changes["effective_date"] = changes["effective_date"].isoformat()
+    if changes.get("supersedes_document_id"):
+        if changes["supersedes_document_id"] == document_id:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "A document cannot supersede itself.")
+        get_document(org, changes["supersedes_document_id"])
+    documents.update_one({"_id": doc["_id"]}, {"$set": changes})
+    detail = ", ".join(f"{k}={v}" for k, v in changes.items())
+    audit_service.record(user, "document.version", "document", document_id, detail=f"{doc['filename']}: {detail}")
+    return clean(documents.find_one({"_id": doc["_id"]}))

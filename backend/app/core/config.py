@@ -45,6 +45,13 @@ class Settings:
     AI_RATE_PER_MINUTE = int(os.getenv("AI_RATE_PER_MINUTE", "10"))
     LOGIN_RATE_PER_MINUTE = int(os.getenv("LOGIN_RATE_PER_MINUTE", "10"))
 
+    # Conflict detection: how alike (0-1) the words around two quantities must be for the sentences to count as
+    # the same instruction (strong: a confirmed conflict is possible; review: only a review notice)
+    CONFLICT_MATCH_STRONG = float(os.getenv("CONFLICT_MATCH_STRONG", "0.6"))
+    CONFLICT_MATCH_REVIEW = float(os.getenv("CONFLICT_MATCH_REVIEW", "0.4"))
+    # Lowest role that may close a conflict; "admin" for a stricter company policy
+    CONFLICT_RESOLVE_ROLE = os.getenv("CONFLICT_RESOLVE_ROLE", "maintenance_manager").strip()
+
     # Whether the person who wrote a work order may also approve it
     ALLOW_SELF_APPROVAL = _flag("ALLOW_SELF_APPROVAL")
 

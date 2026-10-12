@@ -7,7 +7,7 @@ cannot invent a source. An answer that cites nothing valid is not shown as an an
 import re
 from string import ascii_uppercase
 
-from . import factory_context, llm, retrieval
+from . import conflict_service, conflicts as conflict_detection, factory_context, llm, retrieval
 from ..core.config import settings
 from ..core.database import documents
 
@@ -19,11 +19,8 @@ NO_EVIDENCE_MESSAGE = (
 EXCERPT_CHARS = 300
 CONFLICT = "CONFLICT"
 # Written by the backend, never by the model: a disagreement between sources is never settled automatically
-CONFLICT_STATUS = "Status: Conflict unresolved."
-CONFLICT_ACTION = (
-    "Recommended action: Do not assume that either of these is the correct one. Have a qualified maintenance "
-    "or safety supervisor confirm the approved, current procedure before proceeding."
-)
+CONFLICT_STATUS = conflict_detection.CONFLICT_STATUS
+CONFLICT_ACTION = conflict_detection.CONFLICT_ACTION
 
 SYSTEM_PROMPT = f"""You are the maintenance knowledge assistant of a factory. You answer ONLY from the numbered EVIDENCE given with each question: passages of the factory's own manuals and SOPs, and its recorded breakdown history.
 
@@ -36,7 +33,8 @@ RULES:
 6. Quote values, units, part numbers and error codes exactly as written. Give a procedure as a numbered list in its order.
 7. Answer in the language of the question (English, Hindi, Hinglish or Marathi), whatever language the evidence is in.
 8. You cannot operate or change any machine. For safety-critical work, say that a qualified person must confirm the step.
-9. Before answering, compare ALL passages that address the question. If two of them give different values or steps for the same thing (for example different waiting times, pressures, intervals or torques), do NOT choose one, do not average and do not merge them. Write exactly {CONFLICT} on the first line, then one sentence saying what the passages disagree about, then one line per differing instruction in the form "- <value or instruction exactly as written> [n]". Passages about clearly different machines or different situations are not a conflict."""
+9. Before answering, compare ALL passages that address the question. If two of them give different values or steps for the same thing (for example different waiting times, pressures, intervals or torques), do NOT choose one, do not average and do not merge them. Write exactly {CONFLICT} on the first line, then one sentence saying what the passages disagree about, then one line per differing instruction in the form "- <value or instruction exactly as written> [n]". Passages about clearly different machines or different situations are not a conflict.
+10. A passage marked "(superseded revision)" is an old version that a manager replaced. Do not give its instructions as current; mention it only if the question asks about the old version."""
 
 _CITATION = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
 _CONFLICT_LINE = re.compile(rf"^[ \t]*{CONFLICT}[ \t:.]*$\n?", re.MULTILINE)
@@ -75,8 +73,13 @@ def gather_evidence(
     """
     ready = {
         str(d["_id"]): d
-        for d in documents.find({"organization_id": organization_id, "status": "ready"}, {"filename": 1, "doc_type": 1})
+        for d in documents.find(
+            {"organization_id": organization_id, "status": "ready"},
+            {"filename": 1, "doc_type": 1, "asset_ids": 1, "revision": 1, "effective_date": 1, "lifecycle": 1},
+        )
     }
+    # Superseded only when a manager recorded it: marked so, or named by a newer document. Never inferred.
+    replaced = {d for d in documents.distinct("supersedes_document_id", {"organization_id": organization_id}) if d}
     if document_id is not None:
         allowed = [document_id] if document_id in ready else []
     elif asset is not None:
@@ -95,6 +98,10 @@ def gather_evidence(
             "document_id": chunk["document_id"],
             "filename": doc["filename"],
             "doc_type": doc.get("doc_type"),
+            "asset_ids": doc.get("asset_ids") or [],
+            "revision": doc.get("revision"),
+            "effective_date": doc.get("effective_date"),
+            "superseded": doc.get("lifecycle") == "superseded" or chunk["document_id"] in replaced,
             "page": chunk["page"],
             "section": chunk["section"],
             "chunk_index": chunk["chunk_index"],
@@ -122,7 +129,8 @@ def _label(item: dict) -> str:
     if item["type"] == "breakdown":
         return "Breakdown record"
     where = f", page {item['page']}" if item["page"] else f", section \"{item['section']}\"" if item["section"] else ""
-    return f"Document \"{item['filename']}\"{where}"
+    old = " (superseded revision)" if item.get("superseded") else ""
+    return f"Document \"{item['filename']}\"{where}{old}"
 
 
 def evidence_block(evidence: list[dict]) -> str:
@@ -185,6 +193,29 @@ def conflict_report(text: str, evidence: list[dict]) -> str | None:
     return "\n".join(lines + ["", CONFLICT_STATUS, CONFLICT_ACTION])
 
 
+def _conflict_answer(organization_id: str, evidence: list[dict], findings: list[dict], result: dict) -> dict:
+    """The response for evidence that disagrees: stored values and fixed wording only, the model is not asked."""
+    parts, ids, used = [], [], []
+    open_kinds = set()
+    for finding in findings:
+        record = conflict_service.sync(organization_id, finding)
+        resolution = record["resolution"] if record["status"] == "resolved" else None
+        parts.append(conflict_detection.render(finding, resolution))
+        ids.append({"id": str(record["_id"]), "kind": finding["kind"], "status": record["status"], "topic": finding["topic"]})
+        used.extend(c["n"] for c in finding["claims"] if c["n"] not in used)
+        if resolution is None:
+            open_kinds.add(finding["kind"])
+    result.update(
+        answer="\n\n".join(parts),
+        insufficient_evidence=False,
+        conflict=conflict_detection.CONFLICT in open_kinds,
+        review_required=conflict_detection.NEEDS_REVIEW in open_kinds,
+        conflicts=ids,
+        citations=[citation(e) for e in evidence if e["n"] in used],
+    )
+    return result
+
+
 def answer(organization_id: str, question: str, asset: dict | None = None, document_id: str | None = None) -> dict:
     """The answer contract of the chat API (without request_id, which the API layer adds)."""
     evidence = gather_evidence(organization_id, question, asset, document_id)
@@ -193,11 +224,21 @@ def answer(organization_id: str, question: str, asset: dict | None = None, docum
         "insufficient_evidence": True,
         "citations": [],
         "conflict": False,
+        "review_required": False,
+        "conflicts": [],
+        "superseded_sources": [],
         "retrieved_document_ids": sorted({e["document_id"] for e in evidence if e["type"] == "document"}),
     }
     if not evidence:
         # Nothing to ground an answer on: the model is not even asked
         return result
+
+    # Disagreements between documents are looked for by the backend itself and answered without the model
+    focus = [str(asset["_id"])] if asset is not None else [str(a["_id"]) for a in factory_context.detect_assets(organization_id, question)]
+    found = conflict_detection.detect(evidence, question, focus, label_of=_source)
+    result["superseded_sources"] = found["superseded"]
+    if found["findings"]:
+        return _conflict_answer(organization_id, evidence, found["findings"], result)
 
     prompt = f"EVIDENCE:\n{evidence_block(evidence)}\n\nQUESTION: {question}"
     text, used = cited_numbers(llm.generate(prompt, SYSTEM_PROMPT), evidence)

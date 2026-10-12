@@ -21,6 +21,7 @@ breakdowns = db["breakdowns"]
 work_orders = db["work_orders"]
 audit_events = db["audit_events"]
 chat_logs = db["chat_logs"]
+conflicts = db["conflicts"]
 counters = db["counters"]
 
 
@@ -39,6 +40,8 @@ def init_db() -> None:
     work_orders.create_index([("organization_id", ASCENDING), ("status", ASCENDING), ("created_at", DESCENDING)])
     audit_events.create_index([("organization_id", ASCENDING), ("created_at", DESCENDING)])
     chat_logs.create_index([("organization_id", ASCENDING), ("created_at", DESCENDING)])
+    conflicts.create_index([("organization_id", ASCENDING), ("fingerprint", ASCENDING)], unique=True)
+    conflicts.create_index([("organization_id", ASCENDING), ("status", ASCENDING), ("last_seen_at", DESCENDING)])
 
 
 def next_number(organization_id: str, kind: str) -> int:

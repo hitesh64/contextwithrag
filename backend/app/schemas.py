@@ -1,6 +1,6 @@
 """Request bodies. Unknown fields are rejected, so a browser cannot slip in organization_id or status."""
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -136,3 +136,17 @@ class TransitionIn(Body):
 
 class CommentIn(Body):
     comment: str = Field("", max_length=1000)
+
+
+class DocumentVersionUpdate(Body):
+    """Version facts about a document. Left out means unchanged; they are never guessed from the file."""
+    revision: str | None = Field(None, max_length=40)
+    effective_date: date | None = None
+    lifecycle: Literal["current", "superseded"] | None = None
+    supersedes_document_id: str | None = Field(None, max_length=40)
+
+
+class ConflictResolveIn(Body):
+    decision: Literal["governs", "outdated", "both_apply", "false_alarm"]
+    document_id: str | None = Field(None, max_length=40, description="The document the decision is about (governs / outdated)")
+    note: str = Field(min_length=10, max_length=1000)

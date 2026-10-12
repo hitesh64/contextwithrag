@@ -303,9 +303,11 @@ pages.chat = async (_, query) => {
   const draw = () => {
     $('#chat-log').innerHTML = chatLog.map(m => m.question !== undefined
       ? `<div class="msg question"><div class="text">${esc(m.question)}</div>${m.asset ? `<div class="hint">Asset: ${esc(m.asset)}</div>` : ''}</div>`
-      : `<div class="msg ${m.insufficient_evidence ? 'unsupported' : m.conflict ? 'conflict' : ''}">
+      : `<div class="msg ${m.insufficient_evidence ? 'unsupported' : m.conflict || m.review_required ? 'conflict' : ''}">
           ${m.insufficient_evidence ? '<div><span class="badge warn">No supporting evidence found</span></div>' : ''}
           ${m.conflict ? `<div class="conflict-head">${fa('triangle-exclamation')}Conflicting procedures detected</div>` : ''}
+          ${m.review_required && !m.conflict ? `<div class="conflict-head">${fa('triangle-exclamation')}Review needed: sources may disagree</div>` : ''}
+          ${(m.superseded_sources || []).length ? `<div class="hint">Superseded revision also found: ${m.superseded_sources.map(s => esc(s.filename)).join(', ')}</div>` : ''}
           <div class="text">${withRefs(m.answer)}</div>${sourceList(m.citations)}
           <div class="hint">Request ${esc(m.request_id)}</div></div>`).join('');
   };

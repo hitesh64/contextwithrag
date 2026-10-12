@@ -1,4 +1,16 @@
-# Conflict detection: design (not yet implemented)
+# Conflict detection: design and status
+
+**Status (12 October 2026):** build steps 1-3 are implemented and tested (`services/conflicts.py`,
+`services/conflict_service.py`, `api/conflicts.py`, `PATCH /documents/{id}/version`, 13 tests in
+`backend/tests/test_conflict_detection.py`). Step 4, the model evaluation with conflict recall and
+false-alarm rate, is not done. Everything below was measured only on fake embeddings and small
+synthetic documents. On the 26 sample questions the detector flags q20 and no other question (retrieval
+with test embeddings, not Gemini).
+
+Differences between this design and the code: a claim must also be about the kind of quantity the
+question asks for (a pressure question ignores waiting times), and share at least 2-3 words with the
+question. Without those two filters a pressure question about the compressor was flagged because of
+the press/lockout waiting times.
 
 ## Why
 
@@ -130,10 +142,43 @@ measured as well as misses. Report conflict recall and false-alarm rate separate
 3. `conflicts` collection, reviewer endpoints, audit, test 12.
 4. Evaluation questions and one same-model run.
 
-## Decisions needed before step 1
+## Decisions (confirmed 12 October 2026)
 
-- Should a general-vs-specific disagreement (the q20 case) always be `conflict`, or `needs_review`?
-  This design says `conflict`: the stricter safety value is waiting for the supervisor.
-- Which roles may resolve: supervisor and admin only, or admin only?
-- Does a confirmed `conflict` skip the model call entirely (cheaper, fully deterministic) or
-  does the model still write the answer text? This design: the backend report is the answer.
+1. **General vs machine-specific disagreement is a `conflict`.** The backend never makes one
+   source the winner. When applicability or conditions are unclear the outcome is `needs_review`,
+   never a confirmed conflict.
+2. **Resolution: supervisor and admin.** In this code base "supervisor" is the existing role
+   `maintenance_manager` (roles: viewer < technician < maintenance_manager < admin). Operators
+   (technician, viewer) can see conflicts, not resolve or override them. A stricter company
+   policy is one setting: `CONFLICT_RESOLVE_ROLE=admin`. Every resolution stores approver,
+   timestamp, decision, note and the source documents, and writes an audit event; a refused
+   attempt is audited as `denied`.
+3. **A confirmed `conflict` and a `needs_review` are answered by the backend alone.** The model
+   is not called and cannot rewrite the report. The report gives values, units, document names,
+   the sentence each value comes from, revision information, the differing conditions and the
+   unresolved status. A `needs_review` is never shown as a final fact.
+
+Implementation rules that follow from these:
+
+- **`superseded` needs proof.** A document counts as superseded only if a manager marked it
+  `lifecycle = superseded`, or another document names it in `supersedes_document_id`. Never from
+  a file name, an upload date or from which value looks newer. Missing revision metadata stays
+  "unknown", and unknown is never "current and approved".
+- Because of that rule, two documents without version metadata that disagree are a `conflict`
+  (not a guess that one is old). The report then adds a note that revision information is
+  missing. This replaces the earlier idea of downgrading such pairs to `needs_review`.
+- **Qualifiers.** The conditions lexicon is small and fixed (hydraulic / pneumatic / electric,
+  hot / warm / cold, loaded / unloaded / empty / full, summer / winter). A claim whose qualifier
+  contradicts one the question itself states is not compared (asking about a hydraulic machine
+  ignores a pneumatic-only sentence). Opposed qualifiers, or a qualifier that the other source
+  never mentions and the question does not state, give `needs_review`.
+- **Ranges.** "5-10 minutes" is compared as a range; different but overlapping ranges are
+  `needs_review`.
+- Two passages of the same document are never compared with each other in v1.
+- A resolved conflict shows the recorded decision to everyone; it reopens when any involved
+  document's version metadata changes or the document is replaced.
+
+## Changes to the plan above
+
+- Test 4 now expects `conflict` (with the missing-revision note), not `needs_review`.
+- Test 10 becomes "the model is not called and the response is flagged".
