@@ -3,7 +3,15 @@
   {"id": "q02", "kind": "direct", "question": "What should the hydraulic chuck pressure gauge read on the lathe?", "expect": [{"document": "CNC-01_lathe_manual.pdf", "page": 1}], "must_include": ["22", "28"]},
   {"id": "q03", "kind": "direct", "question": "How often is the spindle oil changed on the CL-200?", "expect": [{"document": "CNC-01_lathe_manual.pdf", "page": 2}], "must_include": ["2000"]},
   {"id": "q04", "kind": "direct", "question": "How many litres of hydraulic oil does the lathe take and which grade?", "expect": [{"document": "CNC-01_lathe_manual.pdf", "page": 2}], "must_include": ["40", "ISO VG 46"]},
-  {"id": "q05", "kind": "direct", "question": "What does alarm E-204 mean and what should I check?", "expect": [{"document": "CNC-01_lathe_manual.pdf", "page": 3}], "must_include": ["overheat"]},
+  {"id": "q05", "kind": "direct", "question": "What does alarm E-204 mean and what should I check?", "expect": [{"document": "CNC-01_lathe_manual.pdf", "page": 3}], "must_include": [[
+    "overheat",
+    "exceeded 70",
+    "exceeds 70",
+    "above 70",
+    "over 70",
+    "more than 70",
+    "higher than 70"
+   ]]},
   {"id": "q06", "kind": "direct", "question": "The lathe shows E415 after a tool change. What is wrong?", "expect": [{"document": "CNC-01_lathe_manual.pdf", "page": 3}], "must_include": ["turret"]},
   {"id": "q07", "kind": "direct", "question": "What coolant concentration is required and how often is it measured?", "expect": [{"document": "CNC-01_lathe_manual.pdf", "page": 4}], "must_include": ["6", "8"]},
   {"id": "q08", "kind": "direct", "question": "What is the part number of the coolant filter element?", "expect": [{"document": "CNC-01_lathe_manual.pdf", "page": 4}], "must_include": ["CF-08"]},

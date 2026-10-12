@@ -12,6 +12,7 @@ application's own data. Results are written to backend/eval/results/latest.json.
 import argparse
 import json
 import os
+import re
 import statistics
 import tempfile
 import time
@@ -38,6 +39,23 @@ def _recall(evidence: list[dict], expected: list[dict], k: int) -> bool:
     passages = [e for e in evidence if e["type"] == "document"][:k]
     records = [e for e in evidence if e["type"] == "breakdown"]
     return all(any(_matches(e, x) for e in (records if "breakdown" in x else passages)) for x in expected)
+
+
+def has_fact(text: str, fact) -> bool:
+    """Whether an answer states a labelled fact.
+
+    fact: one wording, or a list of wordings of the same fact, any of which counts (an answer may say
+    "overheating" or "has exceeded 70 degrees"). A number must stand alone: "70" is not found in "170",
+    "1,70" or "70.5", so a different value does not pass as the labelled one.
+    """
+    if isinstance(fact, list):
+        return any(has_fact(text, wording) for wording in fact)
+    pattern = re.escape(fact.lower())
+    if fact[:1].isdigit():
+        pattern = r"(?<!\d)(?<!\d[.,])" + pattern
+    if fact[-1:].isdigit():
+        pattern += r"(?!\d)(?![.,]\d)"
+    return re.search(pattern, text.lower()) is not None
 
 
 def main() -> None:
@@ -120,7 +138,7 @@ def main() -> None:
                         # Correct: every cited source is real (guaranteed by the backend) and at least one is a labelled one
                         row["citation_ok"] = any(_matches(c, x) for c in result["citations"] for x in q["expect"])
                         row["all_sources_cited"] = all(any(_matches(c, x) for c in result["citations"]) for x in q["expect"])
-                        row["facts_ok"] = all(f.lower() in text for f in q.get("must_include", []))
+                        row["facts_ok"] = all(has_fact(text, f) for f in q.get("must_include", []))
                     if q["kind"] == "conflict":
                         row["conflict_ok"] = result.get("conflict") is True
                     if q.get("must_not_include"):
@@ -182,14 +200,13 @@ def write(summary: dict, rows: list[dict], name: str = "latest.json") -> None:
     print(f"\nDetails: {out / name}")
 
 
-def merge(paths: list[str]) -> None:
-    """One report from several runs of the same model, e.g. when a daily quota ended a run early.
+def combine(runs: list[dict], questions: list[dict]) -> list[dict]:
+    """The rows of several runs of one model as one run: every question once, in the order of its id.
 
-    Per question the first answer without a model error is kept; files are read in the order given.
-    Runs of different generation models, embedding models or retrieval depths are refused: their
-    figures are not one benchmark.
+    Per question the first answer without a model error is kept, in the order the runs are given; an
+    error never replaces an answer. "Expected facts" is scored again from the stored answer with the
+    current labels, so that all rows of the merged report are judged by one rule.
     """
-    runs = [json.loads(Path(p).read_text(encoding="utf-8")) for p in paths]
     for key in ("generation_model", "embedding_model", "retrieval_k"):
         values = {run["summary"].get(key) for run in runs}
         if len(values) != 1:
@@ -199,12 +216,26 @@ def merge(paths: list[str]) -> None:
         for row in run["rows"]:
             kept = rows.get(row["id"])
             if kept is None or ("error" in kept and "error" not in row):
-                rows[row["id"]] = row
-    ordered = sorted(rows.values(), key=lambda r: r["id"])
+                rows[row["id"]] = dict(row)
+    labels = {q["id"]: q for q in questions}
+    for row in rows.values():
+        if "facts_ok" in row and "answer" in row and row["id"] in labels:
+            row["facts_ok"] = all(has_fact(row["answer"], f) for f in labels[row["id"]].get("must_include", []))
+    return sorted(rows.values(), key=lambda r: r["id"])
+
+
+def merge(paths: list[str]) -> None:
+    """One report (results/merged.json) from several runs, e.g. when a daily quota ended a run early."""
+    runs = [json.loads(Path(p).read_text(encoding="utf-8")) for p in paths]
+    questions = json.loads((HERE / "questions.json").read_text(encoding="utf-8"))
+    rows = combine(runs, questions)
     first = runs[0]["summary"]
-    summary = summarize(ordered, first["embedding_model"], first["retrieval_k"], first.get("generation_model"))
+    summary = summarize(rows, first["embedding_model"], first["retrieval_k"], first.get("generation_model"))
     summary["merged_from"] = [Path(p).name for p in paths]
-    write(summary, ordered, "merged.json")
+    missing = sorted({q["id"] for q in questions} - {r["id"] for r in rows})
+    summary["questions_missing"] = missing
+    summary["questions_with_model_error"] = [r["id"] for r in rows if "error" in r]
+    write(summary, rows, "merged.json")
 
 
 if __name__ == "__main__":

@@ -64,22 +64,35 @@ on `gemini-2.5-flash`. The key's daily generation quota ended it early, so it is
 | Questions answered | 10 of 26 (8 by the model; q20 and q26 need no model call) |
 | Stopped by quota (HTTP 429) | 16: q06, q08, q10, q12-q19, q21-q25 |
 | Of the 9 answered questions with labelled sources: citation correct, all sources cited | 9 / 9, 9 / 9 |
-| Expected facts present (keyword check) | 8 / 9 |
+| Expected facts present | 9 / 9 (8 / 9 under the first, cruder check; see below) |
 | Conflict flagged (q20, by the backend, no model call) | 1 / 1 |
 | Abstention, prompt injection | not measured: q21-q25 never ran |
 
-The one "facts" miss, q05, is the keyword check and not the answer: the answer says the spindle
-temperature "has exceeded 70 degrees C" with the right citation and the right five checks, but
-does not contain the labelled word "overheat".
+**Why it stopped.** Google's error names the limit: `GenerateRequestsPerDayPerProjectPerModel-FreeTier`,
+20 requests a day per project and model. Of 26 questions 24 need a model call (q20 and q26 do not),
+so one free project cannot finish this benchmark on one model in one day, whatever the key. A new
+key of the same project shares the limit; it resets about 14 hours after the run (early morning IST).
+
+**The facts check was wrong for q05, and is changed.** The answer said the spindle temperature "has
+exceeded 70 degrees C", with the right citation; the label asked for the word "overheat". A label
+may now list several wordings of one fact, and a number must stand alone, so "exceeded 80 degrees"
+or "170" does not pass as "70" (before, "5" was found inside "15"). The stricter number rule
+applies to every question; the nine answers of this run pass it. Rows are scored again with the
+current labels when runs are merged.
 
 Nothing about abstention or prompt-injection resistance can be claimed from this run. To finish
-it, run the 16 missing questions on the same model when quota allows and merge; the merge
-refuses runs of different models:
+it, run the 16 missing questions on the same model after the quota resets, without changing the
+answering code in between, and merge:
 
 ```bash
 .venv\Scripts\python.exe -m backend.eval.run_eval --answers --delay 13 --model gemini-2.5-flash --only q06,q08,q10,q12,q13,q14,q15,q16,q17,q18,q19,q21,q22,q23,q24,q25
 .venv\Scripts\python.exe -m backend.eval.run_eval --merge backend/eval/results/2026-10-12_flash_single-model_partial.json backend/eval/results/latest.json
 ```
+
+The merge writes `results/merged.json`. It keeps each question once, never lets a quota error
+replace an answer, lists `questions_missing` and `questions_with_model_error`, and refuses runs
+that differ in generation model, embedding model or retrieval depth (5 tests in
+`backend/tests/test_eval_tools.py`). The benchmark is complete only when both lists are empty.
 
 ## The whole assistant: status on 12 October 2026, first baseline measured (two models)
 
@@ -139,7 +152,7 @@ Per-question details of this run: `backend/eval/results/2026-10-12_*.json` (not 
 
 ## What the automated tests already establish
 
-These hold regardless of the model, because the backend enforces them (59 tests, all passing):
+These hold regardless of the model, because the backend enforces them (64 tests, all passing):
 
 - A user of one factory cannot read, cite, download, edit or delete another factory's assets,
   documents, breakdowns, work orders or audit events.
