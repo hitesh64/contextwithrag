@@ -62,8 +62,10 @@ The numbers are unchanged; the names now say what they are.
 
 - *Questions with all labelled sources in the top k* is counted per question and is stricter than
   recall: a question with two labelled sources counts only if both are found. It was called
-  "Recall@k". *Source recall at k* is recall in the usual sense, labelled sources retrieved over
-  labelled sources (25 across the 21 questions).
+  "Recall@k". *Source recall at k* is recall in the usual sense, summed over all questions:
+  `labelled sources found in the first k passages / labelled sources`. The 25 in "23 / 25" are
+  labelled sources (18 questions have one, 2 have two, 1 has three), not questions, so this is not
+  a hit rate.
 - *At least one cited source is a labelled one* was called "citation correct" and described as
   "every citation points at a labelled source", which it never checked: an answer citing one right
   and one unrelated source passed. The evaluation now reports three separate checks: at least one
@@ -92,10 +94,11 @@ on `gemini-2.5-flash`. The key's daily generation quota ended it early, so it is
 **Why it stopped.** Google's error names the limit: `GenerateRequestsPerDayPerProjectPerModel-FreeTier`,
 20 requests a day per project and model. Of 26 questions 24 need a model call (q20 and q26 do not),
 so one free project cannot finish this benchmark on one model in one day, whatever the key. A new
-key of the same project shares the limit. When it resets is not certain: the error said "retry in
-14h17m" at about 15:10 IST (about 05:30 IST), while Google's documentation says daily quotas reset
-at midnight Pacific time (12:30 IST in October). Check the rate-limit page of AI Studio before the
-next run; a run that meets the limit costs nothing and can be repeated.
+key of the same project shares the limit. Google's documentation says daily quotas reset at
+midnight Pacific time, which is 12:30 IST until 1 November 2026 and 13:30 IST after it. (The error
+itself said "retry in 14h17m" at about 15:10 IST, which would be 05:30 IST; the documented time is
+the one to plan with.) Check the rate-limit page of AI Studio before the next run; a run that
+meets the limit costs nothing and can be repeated.
 
 **The facts check was wrong for q05, and is changed.** The answer said the spindle temperature "has
 exceeded 70 degrees C", with the right citation; the label asked for the word "overheat". A label
@@ -115,8 +118,9 @@ answering code in between, and merge:
 
 The merge writes `results/merged.json`. It keeps each question once, never lets a quota error
 replace an answer, lists `questions_missing` and `questions_with_model_error`, and refuses runs
-that differ in generation model, embedding model or retrieval depth (5 tests in
-`backend/tests/test_eval_tools.py`). The benchmark is complete only when both lists are empty.
+that differ in generation model, embedding model or retrieval depth (tests in
+`backend/tests/test_eval_tools.py`). It prints COMPLETE, and sets `complete: true`, only when all
+26 questions are present once and both lists are empty.
 
 ## The whole assistant: status on 12 October 2026, first baseline measured (two models)
 

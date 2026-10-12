@@ -262,7 +262,13 @@ def merge(paths: list[str]) -> None:
     missing = sorted({q["id"] for q in questions} - {r["id"] for r in rows})
     summary["questions_missing"] = missing
     summary["questions_with_model_error"] = [r["id"] for r in rows if "error" in r]
+    # The one line to read: every labelled question is present exactly once and none ended in an error
+    summary["complete"] = not missing and not summary["questions_with_model_error"] and len(rows) == len(questions)
     write(summary, rows, "merged.json")
+    if summary["complete"]:
+        print(f"\nCOMPLETE: {len(rows)} questions, one model ({summary.get('generation_model')}), no model errors.")
+    else:
+        print(f"\nNOT COMPLETE: {len(missing)} question(s) missing, {len(summary['questions_with_model_error'])} with a model error.")
 
 
 if __name__ == "__main__":
