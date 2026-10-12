@@ -4,6 +4,7 @@
     python -m backend.eval.run_eval --answers       also ask the model: citations, abstention, facts, latency
     python -m backend.eval.run_eval --answers --only q05,q21 --delay 13
     python -m backend.eval.run_eval --merge results/a.json results/b.json    one report from runs split by quota
+    python -m backend.eval.run_eval --resume results/merged.json --delay 13  ask only what a quota error left unanswered
 
 It runs against an in-memory database and a temporary vector index filled with the synthetic
 sample dataset, with the real Gemini embedding and generation models, and never touches the
@@ -79,9 +80,18 @@ def main() -> None:
     parser.add_argument("--delay", type=float, default=5.0, help="seconds between model calls (free keys allow few per minute)")
     parser.add_argument("--model", default="gemini-2.5-flash-lite", help="generation model for --answers")
     parser.add_argument("--merge", nargs="+", metavar="RESULT.json", help="combine earlier runs of one model into results/merged.json; runs nothing")
+    parser.add_argument("--resume", metavar="RESULT.json", help="ask only the questions that ended in a model error in that run, same model, then merge both into results/merged.json")
     args = parser.parse_args()
     if args.merge:
         return merge(args.merge)
+    if args.resume:
+        earlier = json.loads(Path(args.resume).read_text(encoding="utf-8"))
+        pending = [r["id"] for r in earlier["rows"] if "error" in r]
+        if not pending:
+            print("Nothing to resume: no question in that run ended in a model error.")
+            return merge([args.resume])
+        args.answers, args.only, args.model = True, ",".join(pending), earlier["summary"]["generation_model"]
+        print(f"Resuming {len(pending)} question(s) on {args.model}: {args.only}")
 
     # Must be set before the application is imported
     tmp = tempfile.mkdtemp(prefix="contextbasedrag_eval_")
@@ -165,6 +175,8 @@ def main() -> None:
 
     summary = summarize(rows, settings.EMBEDDING_MODEL, settings.RETRIEVAL_K, args.model if args.answers else None)
     write(summary, rows)
+    if args.resume:
+        merge([args.resume, str(HERE / "results" / "latest.json")])
 
 
 def summarize(rows: list[dict], embedding_model: str, retrieval_k: int, generation_model: str | None) -> dict:
