@@ -1,7 +1,7 @@
 """The evaluation's own scoring and merging: a report is only worth something if these are right."""
 import pytest
 
-from backend.eval.run_eval import combine, has_fact, summarize
+from backend.eval.run_eval import citation_checks, combine, has_fact, sources_found, summarize
 
 E204 = ["overheat", "exceeded 70", "exceeds 70", "above 70", "over 70", "more than 70", "higher than 70"]
 
@@ -73,3 +73,50 @@ def test_merging_scores_facts_again_with_the_current_labels():
     assert combine([old], labels)[0]["facts_ok"] is True
     wrong = run("gemini-2.5-flash", [answered("q05", "The spindle temperature has exceeded 90 degrees C [1].", facts_ok=True)])
     assert combine([wrong], labels)[0]["facts_ok"] is False
+
+
+# ---------- what the retrieval and citation figures mean ----------
+
+MANUAL = {"type": "document", "filename": "lathe.pdf", "page": 3, "section": None}
+OTHER = {"type": "document", "filename": "press.docx", "page": None, "section": "Faults"}
+RECORD = {"type": "breakdown", "record_no": "BD-0002"}
+WANT = [{"document": "lathe.pdf", "page": 3}, {"breakdown": "BD-0002"}]
+
+
+def test_a_citation_of_an_unrelated_source_is_not_hidden_by_a_correct_one():
+    mixed = citation_checks([MANUAL, OTHER], WANT)
+    # One labelled source is cited, but not every citation is a labelled one, and one labelled source is missing
+    assert mixed == {"has_labelled_citation": True, "only_labelled_citations": False, "all_sources_cited": False}
+    assert citation_checks([MANUAL, RECORD], WANT) == {
+        "has_labelled_citation": True, "only_labelled_citations": True, "all_sources_cited": True,
+    }
+    assert citation_checks([OTHER], WANT)["has_labelled_citation"] is False
+    # The right file but the wrong page is not the labelled source
+    assert citation_checks([{**MANUAL, "page": 9}], WANT)["has_labelled_citation"] is False
+    assert citation_checks([], WANT)["only_labelled_citations"] is False
+
+
+def test_recall_counts_sources_and_is_not_the_same_as_every_source_found():
+    evidence = [OTHER, MANUAL]
+    assert sources_found(evidence, WANT, 1) == 0 and sources_found(evidence, WANT, 2) == 1
+    assert sources_found(evidence + [RECORD], WANT, 1) == 1  # a breakdown record is not ranked among the passages
+
+    rows = [
+        {"id": "a", "kind": "direct", "recall": {"1": False, "3": False, "6": True}, "sources_labelled": 2, "sources_found": {"1": 1, "3": 1, "6": 2}},
+        {"id": "b", "kind": "direct", "recall": {"1": True, "3": True, "6": True}, "sources_labelled": 1, "sources_found": {"1": 1, "3": 1, "6": 1}},
+    ]
+    summary = summarize(rows, "e", 6, None)
+    # One of two questions has all its sources at k=1, but two of the three labelled sources were found
+    assert summary["questions_with_all_sources_in_top_k"]["1"] == {"passed": 1, "of": 2, "rate": 0.5}
+    assert summary["source_recall_at_k"]["1"] == {"found": 2, "of": 3, "rate": 0.667}
+    assert summary["source_recall_at_k"]["6"]["rate"] == 1.0
+
+
+def test_older_result_files_keep_their_meaning_when_merged():
+    old = run("gemini-2.5-flash", [answered("q01", citation_ok=True, all_sources_cited=True, recall={"1": True, "3": True, "6": True})])
+    row = combine([old], [])[0]
+    assert row["has_labelled_citation"] is True and "citation_ok" not in row
+    summary = summarize([row], "e", 6, "gemini-2.5-flash")
+    # The stricter check was never computed for that file, so it is absent rather than assumed
+    assert summary["has_labelled_citation"]["passed"] == 1 and summary["only_labelled_citations"] is None
+    assert summary["source_recall_at_k"] is None

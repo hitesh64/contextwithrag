@@ -9,7 +9,7 @@ const STATUS_STYLE = {
   ready: 'ok', resolved: 'ok', approved: 'ok', completed: 'ok', active: 'ok', success: 'ok',
   queued: 'info', processing: 'info', in_progress: 'info', draft: 'info',
   pending_approval: 'warn', open: 'warn', under_maintenance: 'warn', high: 'warn', denied: 'warn',
-  failed: 'bad', rejected: 'bad', critical: 'bad', cancelled: '', archived: '', inactive: '',
+  failed: 'bad', rejected: 'bad', critical: 'bad', conflict: 'bad', needs_review: 'warn', cancelled: '', archived: '', inactive: '',
 };
 const MOVE_LABEL = {
   pending_approval: 'Submit for approval', approved: 'Approve', rejected: 'Reject', draft: 'Back to draft',
@@ -212,6 +212,7 @@ const NAV = [
   ['dashboard', 'Dashboard', 'viewer', 'gauge-high', 'Main'], ['chat', 'Ask', 'viewer', 'comments', 'Main'],
   ['assets', 'Assets', 'viewer', 'industry', 'Maintenance'], ['documents', 'Documents', 'viewer', 'book-open', 'Maintenance'],
   ['breakdowns', 'Breakdowns', 'viewer', 'triangle-exclamation', 'Maintenance'], ['work-orders', 'Work orders', 'viewer', 'clipboard-list', 'Maintenance'],
+  ['conflicts', 'Conflicts', 'viewer', 'code-compare', 'Maintenance'],
   ['audit', 'Audit history', 'maintenance_manager', 'clock-rotate-left', 'Administration'], ['users', 'Users', 'admin', 'users', 'Administration'],
 ];
 const fa = name => `<i class="fa-solid fa-${name}"></i>`;
@@ -309,6 +310,7 @@ pages.chat = async (_, query) => {
           ${m.review_required && !m.conflict ? `<div class="conflict-head">${fa('triangle-exclamation')}Review needed: sources may disagree</div>` : ''}
           ${(m.superseded_sources || []).length ? `<div class="hint">Superseded revision also found: ${m.superseded_sources.map(s => esc(s.filename)).join(', ')}</div>` : ''}
           <div class="text">${withRefs(m.answer)}</div>${sourceList(m.citations)}
+          ${(m.conflicts || []).length ? `<div class="hint"><a href="#/conflicts?status=">Open this in Conflicts</a> to see or record the decision.</div>` : ''}
           <div class="hint">Request ${esc(m.request_id)}</div></div>`).join('');
   };
   draw();
@@ -662,13 +664,66 @@ async function workOrderDetail(id) {
   };
 }
 
+const DECISIONS = [
+  ['governs', 'One document governs'], ['outdated', 'One document is outdated'],
+  ['both_apply', 'Both apply, under different conditions'], ['false_alarm', 'Not a real conflict'],
+];
+
+pages.conflicts = async (_, query) => {
+  const params = { status: query.get('status') ?? 'open', kind: query.get('kind') || '', page: query.get('page') || 1 };
+  const data = await api('/conflicts', { params });
+  const decisionText = r => `${esc(Object.fromEntries(DECISIONS)[r.decision] || r.decision)}${r.document_name ? ` (${esc(r.document_name)})` : ''}`;
+  page().innerHTML = `
+    <div class="page-head"><h1>Conflicts between documents</h1></div>
+    <div class="notice">Found when a question was asked and two of your documents gave different values for the same instruction.
+      The assistant never picks one. A maintenance manager or administrator records which applies; everyone can see the decision.
+      A decision is reopened when one of the documents changes.</div>
+    <form class="filters" id="filters">
+      <label>Status<select name="status">${[['open', 'Open'], ['resolved', 'Resolved'], ['', 'All']].map(([v, t]) => `<option value="${v}" ${v === params.status ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+      <label>Kind<select name="kind">${[['', 'All'], ['conflict', 'Conflict'], ['needs_review', 'Needs review']].map(([v, t]) => `<option value="${v}" ${v === params.kind ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+      <button class="btn" type="submit">Apply</button></form>
+    ${data.items.length ? data.items.map(c => `
+      <div class="card">
+        <h2>${fa('code-compare')}${esc(c.topic || 'Instruction')} ${badge(c.kind)} ${badge(c.status)}</h2>
+        ${c.claims.map(s => `<div class="source"><span><b>${esc(s.value)}</b> ·
+            <a href="#" data-action="open-doc" data-id="${esc(s.document_id)}" data-page="${esc(s.page || '')}">${esc(s.filename)}</a>${s.revision ? ` · revision ${esc(s.revision)}` : ''}</span>
+          <span class="excerpt">${esc(s.sentence)}</span></div>`).join('')}
+        ${(c.differences || []).length ? `<p class="hint">Differences in conditions: ${esc(c.differences.join('; '))}.</p>` : ''}
+        ${(c.notes || []).map(n => `<p class="hint">${esc(n)}</p>`).join('')}
+        ${c.resolution ? `<p><b>Decision:</b> ${decisionText(c.resolution)} · ${esc(c.resolution.resolved_by_name)} · ${when(c.resolution.resolved_at)}<br>${esc(c.resolution.note)}</p>` : ''}
+        <div class="actions"><span class="hint">Seen ${c.times_seen} time${c.times_seen === 1 ? '' : 's'}, last ${when(c.last_seen_at)}${(c.history || []).length ? ` · ${c.history.length} earlier decision${c.history.length === 1 ? '' : 's'}` : ''}</span>
+          ${c.status === 'open' && can('maintenance_manager') ? `<button class="btn primary small" data-action="resolve-conflict" data-id="${esc(c.id)}">Record a decision</button>` : ''}</div>
+      </div>`).join('') : '<div class="empty">No conflicts match.</div>'}${pager(data, 'conflict-page')}`;
+  $('#filters').onsubmit = event => { event.preventDefault(); location.hash = '#/conflicts?' + new URLSearchParams(new FormData(event.target)); };
+  actions['conflict-page'] = el => { query.set('page', el.dataset.page); location.hash = '#/conflicts?' + query; };
+  actions['resolve-conflict'] = async el => {
+    const conflict = data.items.find(c => c.id === el.dataset.id);
+    const documents = [...new Map(conflict.claims.map(s => [s.document_id, `${s.filename} (${s.value})`]))];
+    if (await formDialog({
+      title: 'Record a decision', submitLabel: 'Record decision',
+      note: 'You confirm that you checked the approved, current procedure. The decision is shown to everyone who asks about this and is written to the audit history.',
+      fields: [
+        { name: 'decision', label: 'Decision', type: 'select', options: DECISIONS, value: 'governs' },
+        { name: 'document_id', label: 'Document the decision is about', type: 'select', options: [['', 'Not about one document'], ...documents], value: '' },
+        { name: 'note', label: 'Reason', type: 'textarea', rows: 3, required: true, maxlength: 1000, hint: 'At least 10 characters: what you checked and why.' },
+      ],
+      submit: values => {
+        const about = ['governs', 'outdated'].includes(values.decision);
+        if (about && !values.document_id) throw new Error('Choose the document this decision is about.');
+        if (values.note.length < 10) throw new Error('Give a reason of at least 10 characters.');
+        return api(`/conflicts/${conflict.id}/resolve`, { method: 'POST', body: { decision: values.decision, document_id: about ? values.document_id : null, note: values.note } });
+      },
+    })) route();
+  };
+};
+
 pages.audit = async (_, query) => {
   const params = { resource_type: query.get('resource_type') || '', result: query.get('result') || '', page: query.get('page') || 1 };
   const data = await api('/audit', { params });
   page().innerHTML = `
     <div class="page-head"><h1>Audit history</h1></div>
     <form class="filters" id="filters">
-      <label>Record type<select name="resource_type">${['', 'work_order', 'document', 'asset', 'breakdown', 'user', 'organization'].map(v => `<option value="${v}" ${v === params.resource_type ? 'selected' : ''}>${v ? label(v) : 'All'}</option>`).join('')}</select></label>
+      <label>Record type<select name="resource_type">${['', 'work_order', 'document', 'conflict', 'asset', 'breakdown', 'user', 'organization'].map(v => `<option value="${v}" ${v === params.resource_type ? 'selected' : ''}>${v ? label(v) : 'All'}</option>`).join('')}</select></label>
       <label>Result<select name="result">${['', 'success', 'denied', 'failed'].map(v => `<option value="${v}" ${v === params.result ? 'selected' : ''}>${v ? label(v) : 'All'}</option>`).join('')}</select></label>
       <button class="btn" type="submit">Apply</button></form>
     ${table([

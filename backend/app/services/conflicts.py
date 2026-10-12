@@ -65,9 +65,12 @@ _add("mass", "kg", 1, ["kg"])
 
 NUMBER_WORDS = {
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
-    "eleven": 11, "twelve": 12, "fifteen": 15, "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60,
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
+    "eighteen": 18, "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60,
+    "seventy": 70, "eighty": 80, "ninety": 90,
 }
-_NUM = r"\d+(?:[.,]\d+)*|" + "|".join(NUMBER_WORDS)
+# Longest first, so that "sixty" is not read as "six"
+_NUM = r"\d+(?:[.,]\d+)*|" + "|".join(sorted(NUMBER_WORDS, key=len, reverse=True))
 _UNIT = (
     r"°\s*c|(?:degrees?|deg)\s*(?:c|celsius)|n\s*[·.\-]?\s*m|"
     + "|".join(sorted((re.escape(u) for u in UNITS if u not in ("°c", "degc", "nm")), key=len, reverse=True))

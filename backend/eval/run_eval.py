@@ -1,6 +1,6 @@
 """Measure retrieval and answer quality on the labelled question set (backend/eval/questions.json).
 
-    python -m backend.eval.run_eval                 retrieval only: Recall@k (embedding calls, no generation quota)
+    python -m backend.eval.run_eval                 retrieval only: labelled sources in the top k (embedding calls, no generation quota)
     python -m backend.eval.run_eval --answers       also ask the model: citations, abstention, facts, latency
     python -m backend.eval.run_eval --answers --only q05,q21 --delay 13
     python -m backend.eval.run_eval --merge results/a.json results/b.json    one report from runs split by quota
@@ -34,11 +34,25 @@ def _matches(evidence: dict, expected: dict) -> bool:
     return True
 
 
-def _recall(evidence: list[dict], expected: list[dict], k: int) -> bool:
-    """All labelled sources are found: documents within the first k passages, breakdown records anywhere in the history given."""
+def sources_found(evidence: list[dict], expected: list[dict], k: int) -> int:
+    """How many labelled sources were retrieved: documents within the first k passages, breakdown records anywhere in the history given."""
     passages = [e for e in evidence if e["type"] == "document"][:k]
     records = [e for e in evidence if e["type"] == "breakdown"]
-    return all(any(_matches(e, x) for e in (records if "breakdown" in x else passages)) for x in expected)
+    return sum(1 for x in expected if any(_matches(e, x) for e in (records if "breakdown" in x else passages)))
+
+
+def citation_checks(citations: list[dict], expected: list[dict]) -> dict:
+    """Three different things an answer's citations can get right; none of them implies the others.
+
+    has_labelled_citation: at least one cited source is a labelled one.
+    only_labelled_citations: every cited source is a labelled one (an extra, unlabelled source fails this).
+    all_sources_cited: every labelled source is cited.
+    """
+    return {
+        "has_labelled_citation": any(_matches(c, x) for c in citations for x in expected),
+        "only_labelled_citations": bool(citations) and all(any(_matches(c, x) for x in expected) for c in citations),
+        "all_sources_cited": all(any(_matches(c, x) for c in citations) for x in expected),
+    }
 
 
 def has_fact(text: str, fact) -> bool:
@@ -113,7 +127,10 @@ def main() -> None:
             evidence = answering.gather_evidence(org if mine else other_org, q["question"], asset)
             row["evidence"] = len(evidence)
             if q.get("expect"):
-                row["recall"] = {str(k): _recall(evidence, q["expect"], k) for k in KS}
+                row["sources_labelled"] = len(q["expect"])
+                row["sources_found"] = {str(k): sources_found(evidence, q["expect"], k) for k in KS}
+                # Kept under its first name so that earlier result files can still be merged
+                row["recall"] = {k: n == len(q["expect"]) for k, n in row["sources_found"].items()}
             if q.get("expect_no_evidence"):
                 row["no_evidence_ok"] = not evidence
 
@@ -136,8 +153,7 @@ def main() -> None:
                     row["citations"] = len(result["citations"])
                     if q.get("expect") and not result["insufficient_evidence"]:
                         # Correct: every cited source is real (guaranteed by the backend) and at least one is a labelled one
-                        row["citation_ok"] = any(_matches(c, x) for c in result["citations"] for x in q["expect"])
-                        row["all_sources_cited"] = all(any(_matches(c, x) for c in result["citations"]) for x in q["expect"])
+                        row.update(citation_checks(result["citations"], q["expect"]))
                         row["facts_ok"] = all(has_fact(text, f) for f in q.get("must_include", []))
                     if q["kind"] == "conflict":
                         row["conflict_ok"] = result.get("conflict") is True
@@ -145,7 +161,7 @@ def main() -> None:
                         row["injection_resisted"] = not any(f.lower() in text for f in q["must_not_include"])
             rows.append(row)
             print(f"  {q['id']} {q['kind']:<18} evidence={row['evidence']:<2} "
-                  + " ".join(f"{k}={v}" for k, v in row.items() if k.endswith("_ok") or k in ("recall", "abstained", "error", "injection_resisted")))
+                  + " ".join(f"{k}={v}" for k, v in row.items() if k.endswith("_ok") or k in ("recall", "abstained", "error", "injection_resisted", "has_labelled_citation", "only_labelled_citations", "all_sources_cited")))
 
     summary = summarize(rows, settings.EMBEDDING_MODEL, settings.RETRIEVAL_K, args.model if args.answers else None)
     write(summary, rows)
@@ -161,14 +177,21 @@ def summarize(rows: list[dict], embedding_model: str, retrieval_k: int, generati
         return {"passed": passed, "of": len(scored), "rate": round(passed / len(scored), 3)}
 
     labelled = [r for r in rows if "recall" in r]
+    counted = [r for r in rows if "sources_found" in r]
     summary = {
         "questions": len(rows),
         "embedding_model": embedding_model,
         "retrieval_k": retrieval_k,
-        "recall_at_k": {
+        # Per question: were ALL its labelled sources in the first k passages (stricter than recall)
+        "questions_with_all_sources_in_top_k": {
             str(k): {"passed": sum(r["recall"][str(k)] for r in labelled), "of": len(labelled),
                      "rate": round(sum(r["recall"][str(k)] for r in labelled) / len(labelled), 3)} for k in KS
         } if labelled else None,
+        # Recall in the usual sense: labelled sources retrieved / labelled sources, over all questions
+        "source_recall_at_k": {
+            str(k): {"found": sum(r["sources_found"][str(k)] for r in counted), "of": sum(r["sources_labelled"] for r in counted),
+                     "rate": round(sum(r["sources_found"][str(k)] for r in counted) / sum(r["sources_labelled"] for r in counted), 3)} for k in KS
+        } if counted else None,
         "cross_organization_blocked": rate("no_evidence_ok"),
     }
     if generation_model:
@@ -179,7 +202,8 @@ def summarize(rows: list[dict], embedding_model: str, retrieval_k: int, generati
             "abstention_correct": rate("abstention_ok"),
             "abstained_when_no_answer_exists": rate("abstention_ok", lambda r: r["kind"] in ("no_answer", "unknown_asset", "cross_organization")),
             "answered_when_answer_exists": rate("abstention_ok", lambda r: "recall" in r),
-            "citation_correct": rate("citation_ok"),
+            "has_labelled_citation": rate("has_labelled_citation"),
+            "only_labelled_citations": rate("only_labelled_citations"),
             "all_labelled_sources_cited": rate("all_sources_cited"),
             "expected_facts_present": rate("facts_ok"),
             "prompt_injection_resisted": rate("injection_resisted"),
@@ -219,6 +243,9 @@ def combine(runs: list[dict], questions: list[dict]) -> list[dict]:
                 rows[row["id"]] = dict(row)
     labels = {q["id"]: q for q in questions}
     for row in rows.values():
+        # Result files written before the citation checks were named precisely
+        if "citation_ok" in row:
+            row["has_labelled_citation"] = row.pop("citation_ok")
         if "facts_ok" in row and "answer" in row and row["id"] in labels:
             row["facts_ok"] = all(has_fact(row["answer"], f) for f in labels[row["id"]].get("must_include", []))
     return sorted(rows.values(), key=lambda r: r["id"])

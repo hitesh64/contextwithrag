@@ -46,11 +46,31 @@ honest reading is "it handles the 22 situations we thought of". The first run sc
 
 What this measurement does not cover: real manuals (these are short, clean, invented text), tables
 and scanned pages, Hindi or Marathi quantities, disagreements stated in words rather than numbers
-(1 case, found by neither configuration), and thresholds, which are still guesses — `ON_TOPIC = 0.6`
-rests on a single failing case. The detector's own logic is also covered by 17 automated tests in
+(1 case, found by neither configuration), a conflicting document that retrieval did not bring into
+the six passages (the detector compares only what was retrieved), questions whose wording matches
+none of the cues for the kind of quantity asked (then every kind is compared), and thresholds,
+which are still guesses — `ON_TOPIC = 0.6`
+rests on a single failing case. The detector's own logic is also covered by 18 automated tests in
 `backend/tests/test_conflict_detection.py`, which need no model and no quota.
 
 Per-case detail of the real-embedding run: `backend/eval/results/2026-10-12_conflict-detector_real-embeddings.json` (results are not in git; re-run the command above to regenerate).
+
+## What the retrieval and citation figures mean
+
+Two figures in this document were first reported under names that claimed more than was measured.
+The numbers are unchanged; the names now say what they are.
+
+- *Questions with all labelled sources in the top k* is counted per question and is stricter than
+  recall: a question with two labelled sources counts only if both are found. It was called
+  "Recall@k". *Source recall at k* is recall in the usual sense, labelled sources retrieved over
+  labelled sources (25 across the 21 questions).
+- *At least one cited source is a labelled one* was called "citation correct" and described as
+  "every citation points at a labelled source", which it never checked: an answer citing one right
+  and one unrelated source passed. The evaluation now reports three separate checks: at least one
+  labelled source cited, only labelled sources cited, all labelled sources cited. "Only labelled
+  sources cited" exists for runs made after this change; earlier result files did not store which
+  sources were cited, so for them it is absent, not assumed. A citation of a relevant passage that
+  nobody labelled fails that check, so it measures agreement with the labels, not correctness.
 
 ## The whole assistant on one model: started 12 October 2026, not finished
 
@@ -59,7 +79,8 @@ on `gemini-2.5-flash`. The key's daily generation quota ended it early, so it is
 
 | | Result |
 |---|---|
-| Retrieval (all 26, no generation needed): Recall@1 / @3 / @6 | 19 / 21, 21 / 21, 21 / 21 |
+| Questions with all their labelled sources in the top 1 / 3 / 6 passages | 19 / 21, 21 / 21, 21 / 21 |
+| Source recall at 1 / 3 / 6 (labelled sources retrieved / labelled sources) | 23 / 25, 25 / 25, 25 / 25 |
 | Cross-factory retrieval blocked | 1 / 1 |
 | Questions answered | 10 of 26 (8 by the model; q20 and q26 need no model call) |
 | Stopped by quota (HTTP 429) | 16: q06, q08, q10, q12-q19, q21-q25 |
@@ -71,7 +92,10 @@ on `gemini-2.5-flash`. The key's daily generation quota ended it early, so it is
 **Why it stopped.** Google's error names the limit: `GenerateRequestsPerDayPerProjectPerModel-FreeTier`,
 20 requests a day per project and model. Of 26 questions 24 need a model call (q20 and q26 do not),
 so one free project cannot finish this benchmark on one model in one day, whatever the key. A new
-key of the same project shares the limit; it resets about 14 hours after the run (early morning IST).
+key of the same project shares the limit. When it resets is not certain: the error said "retry in
+14h17m" at about 15:10 IST (about 05:30 IST), while Google's documentation says daily quotas reset
+at midnight Pacific time (12:30 IST in October). Check the rate-limit page of AI Studio before the
+next run; a run that meets the limit costs nothing and can be repeated.
 
 **The facts check was wrong for q05, and is changed.** The answer said the spindle temperature "has
 exceeded 70 degrees C", with the right citation; the label asked for the word "overheat". A label
@@ -102,11 +126,11 @@ This is a baseline on invented data, not evidence of accuracy on a real factory'
 
 | Metric | Result | Questions |
 |---|---|---|
-| Recall@1 | 19 / 21 (90.5%) | 21 with labelled sources |
-| Recall@3 | 21 / 21 | 21 |
-| Recall@6 | 21 / 21 | 21 |
+| Questions with all labelled sources in the top 1 passage | 19 / 21 (90.5%) | 21 with labelled sources |
+| ... in the top 3 | 21 / 21 | 21 |
+| ... in the top 6 | 21 / 21 | 21 |
 | Cross-factory retrieval blocked | 1 / 1 | 1 |
-| Citation correct (every citation points at a labelled source) | 21 / 21 | 21 answered |
+| At least one cited source is a labelled one | 21 / 21 | 21 answered |
 | All labelled sources cited | 20 / 21 | 21 |
 | Expected facts present (keyword check) | 20 / 21 | 21 |
 | Answers when an answer exists | 21 / 21 | 21 |
@@ -152,7 +176,7 @@ Per-question details of this run: `backend/eval/results/2026-10-12_*.json` (not 
 
 ## What the automated tests already establish
 
-These hold regardless of the model, because the backend enforces them (64 tests, all passing):
+These hold regardless of the model, because the backend enforces them (68 tests, all passing):
 
 - A user of one factory cannot read, cite, download, edit or delete another factory's assets,
   documents, breakdowns, work orders or audit events.

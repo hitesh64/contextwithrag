@@ -176,6 +176,11 @@ def test_units_are_normalised_and_numbers_without_units_are_not_claims():
     ]
 
 
+def test_numbers_written_as_words_are_read_whole():
+    text = "Wait thirteen minutes. Run for sixty minutes. Wait six minutes. Cool for ninety minutes."
+    assert [c["low"] for c in detector.extract_claims(text, set())] == [13, 60, 6, 90]
+
+
 def test_a_unit_separated_from_its_number_is_read_but_never_from_inside_a_word():
     """Found by the evaluation: "every 500 operating hours" was missed, and "10 minutes until" read as 10 litres."""
     plan = detector.extract_claims("Replace the return filter every 500 operating hours.", set())

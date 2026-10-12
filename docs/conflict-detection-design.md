@@ -6,7 +6,7 @@ that evaluation forced, in particular that generic verbs ("wait", "open") do not
 the same instruction and that a disagreement must be about what the question asked.
 
 Build steps 1-3 are implemented and tested (`services/conflicts.py`,
-`services/conflict_service.py`, `api/conflicts.py`, `PATCH /documents/{id}/version`, 13 tests in
+`services/conflict_service.py`, `api/conflicts.py`, `PATCH /documents/{id}/version`, 18 tests in
 `backend/tests/test_conflict_detection.py`). Step 4 is done: 22 labelled cases
 (`backend/eval/conflict_cases.json`, corpus in `data/conflict_eval/`) run by
 `backend.eval.run_conflict_eval`, with conflict recall and false-alarm rate reported separately and
@@ -47,8 +47,11 @@ detector can still do scope and value comparison, and says so.
 Runs in `gather_evidence` output, before the model's answer is trusted.
 
 1. **Extract claims.** Split each document passage into sentences. A claim is a sentence with a
-   number plus a unit from a fixed list: time (s, min, h, day, week, month), pressure (bar, psi,
-   kPa, MPa), torque (Nm), temperature (°C), length (mm, m), volume (l, ml). Units are
+   number plus a unit from a fixed list (the table `UNITS` in `services/conflicts.py` is the
+   authority): time (seconds, minutes, hours, days, weeks), pressure (bar, psi, kPa, MPa), torque
+   (Nm), temperature (degrees C), length (mm, cm, metres written out), volume (ml, litres), speed
+   (rpm), mass (kg). Not read: months and years (no fixed length), a bare "m" or "s" (too easily a
+   word), degrees F, and number words other than one to twenty and the tens up to ninety. Units are
    normalised to one base unit per dimension ("1 hour" = 60 min). Breakdown records are
    history, not procedure, and are not compared.
 2. **Pick claims relevant to the question.** Keep a claim only if its sentence shares enough
