@@ -1,9 +1,15 @@
 # Deployment on Render (free plan)
 
-**Status, 13 October 2026: prepared, not deployed.** `https://contextwithrag.onrender.com` still
-runs the earlier banking version from the `main` branch. Nothing below has been run against
-Render; the storage behaviour is covered by tests in `backend/tests/test_deployment_storage.py`,
-the rest is a checklist.
+**Status, 13 October 2026: deployed.** `https://contextwithrag.onrender.com` runs this application
+since `main` was merged at `33048fd`; the build took about five minutes. Checked from outside,
+without signing in: `/health` answers `ok`, `/app` serves the sign-in page, the landing page links to
+it, the API lists 32 paths including the conflict endpoints, and `/api/v1/documents` and
+`/api/v1/conflicts` refuse a request without a login (401).
+
+**Not checked yet on the deployed service:** registering and signing in, uploading and indexing a
+document, an answer from the model, that `MONGO_DB` is `contextbasedrag` and not the banking
+database, and above all the restart test in step 5 below. Memory use on the 512 MB plan is unknown.
+The storage behaviour itself is covered by tests in `backend/tests/test_deployment_storage.py`.
 
 ## What is different on a free cloud plan
 

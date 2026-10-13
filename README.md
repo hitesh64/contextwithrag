@@ -79,7 +79,8 @@ conflicting procedures, no answer, unknown asset, prompt injection, cross-factor
 
 ## Deployment
 
-Prepared for Render's free plan, not deployed yet: `render.yaml` and `docs/deployment.md`. That plan
+A demonstration runs on Render's free plan at https://contextwithrag.onrender.com/app (see
+`render.yaml` and `docs/deployment.md` for what was and was not checked there). That plan
 empties the disk on every restart, so uploads are also kept in MongoDB (`FILE_STORE=database`) and
 indexed again at start-up (`REINDEX_ON_START=true`).
 
