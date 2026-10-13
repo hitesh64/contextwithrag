@@ -1,0 +1,32 @@
+[
+  {
+    "asset_code": "CNC-01",
+    "name": "CNC Lathe CL-200",
+    "asset_type": "CNC lathe",
+    "manufacturer": "Sample Machines",
+    "model": "CL-200",
+    "serial_number": "CL200-1187",
+    "location": "Machine shop, Bay 2",
+    "criticality": "high"
+  },
+  {
+    "asset_code": "PRESS-07",
+    "name": "Hydraulic Press HP-80",
+    "asset_type": "Hydraulic press",
+    "manufacturer": "Sample Hydraulics",
+    "model": "HP-80",
+    "serial_number": "HP80-0452",
+    "location": "Press shop, Bay 5",
+    "criticality": "critical"
+  },
+  {
+    "asset_code": "COMP-03",
+    "name": "Screw Air Compressor SC-22",
+    "asset_type": "Air compressor",
+    "manufacturer": "Sample Air",
+    "model": "SC-22",
+    "serial_number": "SC22-3301",
+    "location": "Utility room",
+    "criticality": "medium"
+  }
+]

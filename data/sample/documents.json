@@ -1,0 +1,33 @@
+[
+  {
+    "filename": "CNC-01_lathe_manual.pdf",
+    "doc_type": "manual",
+    "asset_codes": [
+      "CNC-01"
+    ]
+  },
+  {
+    "filename": "COMP-03_compressor_manual.pdf",
+    "doc_type": "manual",
+    "asset_codes": [
+      "COMP-03"
+    ]
+  },
+  {
+    "filename": "PRESS-07_hydraulic_press_sop.docx",
+    "doc_type": "sop",
+    "asset_codes": [
+      "PRESS-07"
+    ]
+  },
+  {
+    "filename": "general_lockout_tagout_sop.txt",
+    "doc_type": "sop",
+    "asset_codes": []
+  },
+  {
+    "filename": "conveyor_note_with_injection.txt",
+    "doc_type": "other",
+    "asset_codes": []
+  }
+]

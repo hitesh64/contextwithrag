@@ -1,0 +1,8 @@
+General Lockout / Tagout Procedure (sample) - applies to all machines. Revision 1, effective 10 January 2024.
+
+1. Tell the shift supervisor and the machine operator before starting.
+2. Stop the machine with its normal stop control.
+3. Switch off the main isolator and lock it with your personal padlock. Attach a tag with your name and the date.
+4. Release stored energy: for hydraulic machines open the pressure release valve and wait 5 minutes; for pneumatic machines vent the air line; block any part that can fall.
+5. Try to start the machine to prove that it is isolated, then return the control to off.
+6. Only the person who fitted a padlock may remove it. If that person is absent, only the plant manager may authorise removal.

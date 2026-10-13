@@ -1,0 +1,11 @@
+asset_code,reported_at,symptoms,error_code,downtime_minutes,root_cause,corrective_action,parts_used,resolution_status,source_record_id
+CNC-01,2026-01-15 09:30,Spindle overheating alarm during roughing,E-204,120,Coolant pump CP-12 failed,Replaced coolant pump CP-12,Coolant pump CP-12,resolved,LOG-0001
+CNC-01,2026-02-20 14:10,Spindle overheating alarm,E-204,90,,Cleaned blocked coolant filter,,resolved,LOG-0002
+CNC-01,2026-04-02 11:45,Spindle overheating alarm after 3 hours of running,E-204,150,Coolant filter blocked with chips,Replaced coolant filter element CF-08,Coolant filter CF-08,resolved,LOG-0003
+CNC-01,2026-03-10 08:20,Chuck does not clamp the bar,E-310,60,Hydraulic oil level low,Topped up hydraulic oil,ISO VG 46 oil 8 litres,resolved,LOG-0004
+CNC-01,2026-05-18 16:00,Turret does not lock after tool change,E-415,,,,,open,LOG-0005
+PRESS-07,2026-02-03 10:00,Ram drifts down when stopped,P-09,240,Ram seal worn,Replaced ram seal kit RS-80,Seal kit RS-80,resolved,LOG-0006
+PRESS-07,2026-05-05 13:30,Ram drifts down slowly,P-09,180,,Tightened check valve fitting,,in_progress,LOG-0007
+PRESS-07,2026-03-22 09:15,Pressure only reaches 140 bar,P-05,75,Return filter blocked,Replaced return filter HF-80,Filter HF-80,resolved,LOG-0008
+COMP-03,2026-04-12 15:40,Compressor tripped on high oil temperature,F-12,45,Oil cooler fins blocked with dust,Cleaned oil cooler,,resolved,LOG-0009
+COMP-03,2026-06-01 12:05,Compressor tripped on high oil temperature,F-12,60,Oil cooler fins blocked with dust,Cleaned oil cooler and room ventilation grille,,resolved,LOG-0010

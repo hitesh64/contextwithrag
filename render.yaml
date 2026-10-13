@@ -1,5 +1,5 @@
-# Render Blueprint: https://render.com/docs/blueprint-spec
-# Dashboard -> New -> Blueprint -> pick this repository. Render asks for the two secret values below.
+# Render Blueprint for the factory maintenance assistant. Read docs/deployment.md first.
+# Dashboard -> New -> Blueprint -> pick this repository and branch. Render asks for the secret values below.
 services:
   - type: web
     name: contextwithrag
@@ -7,8 +7,8 @@ services:
     plan: free
     region: singapore
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /api/health
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
     autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
@@ -18,30 +18,26 @@ services:
         sync: false
       - key: MONGO_URI
         sync: false
+      # A database of its own: the earlier banking version used "nexus_ai" and its records are not compatible
       - key: MONGO_DB
-        value: nexus_ai
+        value: contextbasedrag
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
+      - key: GEMINI_BACKUP_MODEL
+        value: gemini-2.5-flash-lite
       - key: EMBEDDING_MODEL
         value: gemini-embedding-001
+      # The free plan's disk is emptied on every restart: keep the uploaded files in MongoDB and
+      # index them again when the server starts
+      - key: FILE_STORE
+        value: database
+      - key: REINDEX_ON_START
+        value: "true"
+      - key: MAX_UPLOAD_MB
+        value: 10
       - key: LOGIN_EXPIRE_MINUTES
         value: 720
-      - key: SHORT_TERM_TTL_HOURS
-        value: 24
-      - key: SHORT_TERM_TURNS
-        value: 10
-      - key: MAX_UPLOAD_MB
-        value: 5
-      - key: MAX_FILE_CHUNKS
-        value: 400
-      - key: CHROMA_DIR
-        value: chroma_data
-
-    # The free plan has no permanent disk: ChromaDB is erased whenever the service restarts or
-    # redeploys. Long-term memory is put back from MongoDB at startup; uploaded files are not and
-    # have to be uploaded again. To keep them too, switch to a paid plan
-    # (plan: starter), uncomment the disk below and set CHROMA_DIR to /var/data/chroma_data.
-    # disk:
-    #   name: chroma-data
-    #   mountPath: /var/data
-    #   sizeGB: 1
+      - key: LOCAL_TIMEZONE
+        value: Asia/Kolkata
+      - key: ALLOW_SELF_APPROVAL
+        value: "false"

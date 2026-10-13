@@ -23,3 +23,8 @@ chroma_data/
 *.log
 Thumbs.db
 .DS_Store
+
+# Uploaded originals, test cache, evaluation output
+storage/
+.pytest_cache/
+backend/eval/results/
