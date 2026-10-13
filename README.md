@@ -20,7 +20,8 @@ that evidence, and requires a manager's approval before a work order can be carr
 ## Not built yet
 
 OCR for scanned documents, follow-up questions that remember the conversation, ERP/CMMS
-integration, sensor data and anything predictive, production deployment with backups. The
+integration, sensor data and anything predictive, production deployment with backups (a
+demonstration deployment is prepared, see Deployment). The
 system never controls a machine.
 
 ## Run it
@@ -75,6 +76,12 @@ python -m backend.eval.run_conflict_eval --fake-embeddings    # conflict detecti
 26 labelled questions in `backend/eval/questions.json` (direct, Hinglish, multi-source,
 conflicting procedures, no answer, unknown asset, prompt injection, cross-factory). See
 `docs/evaluation.md` for the current state of the measurements.
+
+## Deployment
+
+Prepared for Render's free plan, not deployed yet: `render.yaml` and `docs/deployment.md`. That plan
+empties the disk on every restart, so uploads are also kept in MongoDB (`FILE_STORE=database`) and
+indexed again at start-up (`REINDEX_ON_START=true`).
 
 ## Sharing the project
 

@@ -22,7 +22,7 @@ from pptx import Presentation
 
 from . import llm, retrieval
 from ..core.config import settings
-from ..core.database import documents
+from ..core.database import documents, stored_files
 from ..core.utils import now
 
 log = logging.getLogger(__name__)
@@ -87,11 +87,37 @@ def store(organization_id: str, ext: str, data: bytes) -> str:
     path = settings.STORAGE_DIR / key
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
+    if settings.FILE_STORE == "database":
+        stored_files.insert_one({"_id": key, "organization_id": organization_id, "data": data, "created_at": now()})
     return key
 
 
 def stored_path(storage_key: str) -> Path:
-    return settings.STORAGE_DIR / storage_key
+    """Where the original is on disk. With FILE_STORE=database a file the disk has lost is put back first."""
+    path = settings.STORAGE_DIR / storage_key
+    if not path.is_file() and settings.FILE_STORE == "database":
+        kept = stored_files.find_one({"_id": storage_key})
+        if kept is not None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(kept["data"])
+    return path
+
+
+def remove_stored(storage_key: str) -> None:
+    (settings.STORAGE_DIR / storage_key).unlink(missing_ok=True)
+    stored_files.delete_one({"_id": storage_key})
+
+
+def reindex_missing() -> int:
+    """Index again every ready document whose chunks are gone; returns how many there were.
+
+    For a host that starts with an empty disk: the records in MongoDB still say "ready", but nothing
+    can be found. A document whose original is gone as well becomes "failed" and says so.
+    """
+    lost = [d["_id"] for d in documents.find({"status": "ready"}, {"_id": 1}) if retrieval.count_chunks(str(d["_id"])) == 0]
+    for document_id in lost:
+        process_document(document_id)
+    return len(lost)
 
 
 def file_hash(data: bytes) -> str:
@@ -177,8 +203,11 @@ def process_document(document_id) -> None:
     organization_id = doc["organization_id"]
     try:
         ext = file_extension(doc["filename"])
+        path = stored_path(doc["storage_key"])
+        if not path.is_file():
+            raise ValueError("The original file is no longer in storage. Upload it again.")
         try:
-            parts = extract(stored_path(doc["storage_key"]), ext)
+            parts = extract(path, ext)
         except Exception:
             raise ValueError("The file could not be read (corrupt or password-protected).")
         if sum(len(p.page_content) for p in parts) < 10:

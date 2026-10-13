@@ -144,7 +144,7 @@ def delete_document(document_id: str, user: dict = Depends(require_role("mainten
         log.exception("Could not delete chunks of document %s", document_id)
         audit_service.record(user, "document.delete", "document", document_id, "failed", doc["filename"])
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "The search index is unavailable; nothing was deleted.")
-    ingestion.stored_path(doc["storage_key"]).unlink(missing_ok=True)
+    ingestion.remove_stored(doc["storage_key"])
     documents.delete_one({"_id": doc["_id"]})
     audit_service.record(user, "document.delete", "document", document_id, detail=doc["filename"])
     return None

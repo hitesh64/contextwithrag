@@ -22,6 +22,8 @@ work_orders = db["work_orders"]
 audit_events = db["audit_events"]
 chat_logs = db["chat_logs"]
 conflicts = db["conflicts"]
+# Original uploaded files, only when FILE_STORE=database
+stored_files = db["stored_files"]
 counters = db["counters"]
 
 

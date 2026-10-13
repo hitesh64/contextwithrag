@@ -1,0 +1,45 @@
+# Render Blueprint for the factory maintenance assistant. Read docs/deployment.md first.
+# Dashboard -> New -> Blueprint -> pick this repository and branch. Render asks for the secret values below.
+services:
+  - type: web
+    name: contextwithrag
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.4
+      # Secrets: typed into the Render dashboard, never stored in git
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: DEMO_PASSWORD
+        sync: false
+      # A database of its own: the earlier banking version used "nexus_ai" and its records are not compatible
+      - key: MONGO_DB
+        value: contextbasedrag
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_BACKUP_MODEL
+        value: gemini-2.5-flash-lite
+      - key: EMBEDDING_MODEL
+        value: gemini-embedding-001
+      # The free plan's disk is emptied on every restart: keep the uploaded files in MongoDB and
+      # index them again when the server starts
+      - key: FILE_STORE
+        value: database
+      - key: REINDEX_ON_START
+        value: "true"
+      - key: MAX_UPLOAD_MB
+        value: 10
+      - key: LOGIN_EXPIRE_MINUTES
+        value: 720
+      - key: LOCAL_TIMEZONE
+        value: Asia/Kolkata
+      - key: ALLOW_SELF_APPROVAL
+        value: "false"

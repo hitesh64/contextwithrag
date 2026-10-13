@@ -28,8 +28,16 @@ class Settings:
     CHROMA_DIR = BASE_DIR / os.getenv("CHROMA_DIR", "chroma_data")
     STORAGE_DIR = BASE_DIR / os.getenv("STORAGE_DIR", "storage")
 
+    # Where the original uploaded files are kept. "disk": STORAGE_DIR only. "database": also in MongoDB, for
+    # hosts whose disk is wiped on every restart (free cloud plans); files are then put back on disk when needed.
+    FILE_STORE = os.getenv("FILE_STORE", "disk").strip().lower()
+    # Index again, at start-up, every document whose searchable chunks are gone. Needed on the same hosts,
+    # because the vector index lives on that disk too. Costs embedding calls at every start.
+    REINDEX_ON_START = _flag("REINDEX_ON_START")
+
     LOGIN_EXPIRE_MINUTES = int(os.getenv("LOGIN_EXPIRE_MINUTES", "720"))
-    MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "10"))
+    # A file kept in MongoDB must fit in one record (16 MB)
+    MAX_UPLOAD_MB = min(int(os.getenv("MAX_UPLOAD_MB", "10")), 15 if FILE_STORE == "database" else 10_000)
     # Largest document (in chunks of ~1200 characters) that is indexed; bounds embedding cost
     MAX_FILE_CHUNKS = int(os.getenv("MAX_FILE_CHUNKS", "400"))
     MAX_IMPORT_ROWS = int(os.getenv("MAX_IMPORT_ROWS", "5000"))

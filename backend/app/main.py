@@ -1,4 +1,5 @@
 import logging
+import threading
 import uuid
 from contextlib import asynccontextmanager
 
@@ -11,9 +12,18 @@ from pymongo.errors import PyMongoError
 from .api import assets, audit, auth, breakdowns, chat, conflicts, documents, work_orders
 from .core.config import settings
 from .core.database import documents as document_records, init_db
-from .services import audit_service, retrieval
+from .services import audit_service, ingestion, retrieval
 
 log = logging.getLogger(__name__)
+
+
+def _reindex() -> None:
+    try:
+        count = ingestion.reindex_missing()
+        if count:
+            log.warning("Indexed %d document(s) again whose chunks were missing at start-up", count)
+    except Exception:
+        log.exception("Re-indexing at start-up failed")
 
 
 @asynccontextmanager
@@ -32,6 +42,9 @@ async def lifespan(app: FastAPI):
         {"status": {"$in": ["queued", "processing"]}},
         {"$set": {"status": "failed", "error": "The server restarted during processing. Use Reprocess."}},
     )
+    if settings.REINDEX_ON_START:
+        # In the background: the server answers its health check while the library is indexed again
+        threading.Thread(target=_reindex, daemon=True).start()
     yield
 
 
