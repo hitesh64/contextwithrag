@@ -86,7 +86,17 @@ for module in (auth, assets, documents, chat, conflicts, breakdowns, work_orders
     api.include_router(module.router)
 app.include_router(api)
 
-app.mount("/static", StaticFiles(directory=settings.FRONTEND_DIR, check_dir=False), name="static")
+class RevalidatedFiles(StaticFiles):
+    """Scripts and styles are checked with the server before a stored copy is used. Otherwise a browser keeps
+    yesterday's app.js next to today's app.html after a deployment."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/static", RevalidatedFiles(directory=settings.FRONTEND_DIR, check_dir=False), name="static")
 
 
 @app.get("/", include_in_schema=False)

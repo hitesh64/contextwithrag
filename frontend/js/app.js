@@ -777,14 +777,17 @@ pages.users = async () => {
 const sharedActions = { ...actions };
 sharedActions['open-doc'] = el => openDocument(el.dataset.id, el.dataset.page);
 
-async function route() {
-  clearTimeout(pollTimer);
-  if (chart) { chart.destroy(); chart = null; }
+function currentRoute() {
   const [path, search = ''] = location.hash.replace(/^#\/?/, '').split('?');
   const [name = 'dashboard', id] = path.split('/');
-  const entry = NAV.find(n => n[0] === (name || 'dashboard')) || NAV[0];
+  return { entry: NAV.find(n => n[0] === (name || 'dashboard')) || NAV[0], id, search };
+}
+
+async function draw() {
+  clearTimeout(pollTimer);
+  if (chart) { chart.destroy(); chart = null; }
+  const { entry, id, search } = currentRoute();
   actions = { ...sharedActions };
-  document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('active', a.dataset.page === entry[0]));
   if (!can(entry[2])) {
     page().innerHTML = '<div class="empty">Your role does not have access to this page.</div>';
     return;
@@ -797,6 +800,16 @@ async function route() {
     if (token) page().innerHTML = `<div class="card"><h2>${fa('circle-exclamation')}This page could not be loaded</h2><p class="error">${esc(error.message)}</p><button class="btn" data-action="retry">Try again</button></div>`;
     actions.retry = route;
   }
+}
+
+// One page is drawn at a time, and only the address the user is on now: without this, a slow answer for a page
+// they have already left is drawn over the page they went to
+const drawLatest = latestOnly(draw);
+
+function route() {
+  const { entry } = currentRoute();
+  document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('active', a.dataset.page === entry[0]));
+  return drawLatest();
 }
 
 document.addEventListener('click', event => {

@@ -62,7 +62,9 @@ python -m pytest backend/tests -q
 The tests use an in-memory database, a temporary vector index and a fake model, so they need no
 network, no database and no API quota. They cover login and roles, isolation between factories,
 upload validation and failure handling, citation validation, conflict detection and who may close
-a conflict, imports, the approval rules, the audit trail, and the evaluation's own scoring.
+a conflict, imports, the approval rules, the audit trail, and the evaluation's own scoring. One test
+runs `node --test frontend/tests` (the page shown is the page the user is on, however slowly an
+earlier page answers) and is skipped if Node.js is not installed.
 
 ## Evaluation
 
