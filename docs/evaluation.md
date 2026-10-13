@@ -126,10 +126,18 @@ limit, and the retry time has pointed at 05:30 IST on three occasions, not at mi
 (12:30 IST) as the documentation says. Single requests were still answered while the limit was
 being reported (two one-word test requests at 11:24 and 11:36 IST, and the two benchmark answers
 at 11:27), so the refusal is not strict; that does not show a rolling window, and an earlier note
-here that suggested one was a guess the error text does not support. What used the day's requests
-before 08:47 IST is not known: the benchmark made 4, the deployed application had logged no
-questions, and this machine was off until 08:46. The usage page of the project in AI Studio
-(https://ai.dev/rate-limit) is the place to look; it has not been compared yet.
+here that suggested one was a guess the error text does not support.
+
+**The project's own requests account for the limit if the day starts at 12:30 IST**, as documented.
+Answers recorded in `backend/eval/results/` on `gemini-2.5-flash` after 12:30 IST on 12 October: 5
+(12:42), up to 4 (conflict check, 12:56), 10 less the two that need no model call (15:06), which is
+16 to 17; the 4 of 08:47 IST on 13 October make 20 to 21, and that run was refused from its fifth
+question on. `gemini-2.5-flash-lite` answered its 20 at 12:40 IST on 12 October and was refused on
+the morning of the 13th. So no other user of the key is needed to explain the refusals, and the
+"retry in" time of the error (05:30 IST) is then simply wrong. This is a tally from file times, not
+a reading of Google's counter: the usage page of the project in AI Studio
+(https://ai.dev/rate-limit) has not been compared, and a run after 12:30 IST on 13 October will
+show which reset time is the real one.
 
 The `source_recall_at_k` of `merged.json` counts only the rows that
 stored per-source results (4 questions so far); the retrieval figures above are from the
