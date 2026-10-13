@@ -21,6 +21,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 KS = (1, 3, 6)
+CHECKPOINT = HERE / "results" / "in_progress.json"
 
 
 def _matches(evidence: dict, expected: dict) -> bool:
@@ -86,6 +87,16 @@ def main() -> None:
         return merge(args.merge)
     if args.resume:
         earlier = json.loads(Path(args.resume).read_text(encoding="utf-8"))
+        # Answers of a run that was cut off before it could write its report are not lost
+        if CHECKPOINT.is_file():
+            cut_off = json.loads(CHECKPOINT.read_text(encoding="utf-8"))
+            if cut_off["summary"].get("generation_model") == earlier["summary"].get("generation_model"):
+                saved = [r["id"] for r in cut_off["rows"] if "answer" in r]
+                print(f"Found {len(saved)} answer(s) of a run that was cut off: {','.join(saved) or '-'}")
+                merge([args.resume, str(CHECKPOINT)])
+                args.resume = str(HERE / "results" / "merged.json")
+                earlier = json.loads(Path(args.resume).read_text(encoding="utf-8"))
+            CHECKPOINT.unlink()
         pending = [r["id"] for r in earlier["rows"] if "error" in r]
         if not pending:
             print("Nothing to resume: no question in that run ended in a model error.")
@@ -170,11 +181,17 @@ def main() -> None:
                     if q.get("must_not_include"):
                         row["injection_resisted"] = not any(f.lower() in text for f in q["must_not_include"])
             rows.append(row)
+            if args.answers:
+                # Written after every question: a run that is killed or times out keeps what it was given
+                CHECKPOINT.parent.mkdir(exist_ok=True)
+                meta = {"generation_model": args.model, "embedding_model": settings.EMBEDDING_MODEL, "retrieval_k": settings.RETRIEVAL_K}
+                CHECKPOINT.write_text(json.dumps({"summary": meta, "rows": rows}, indent=2, default=str), encoding="utf-8")
             print(f"  {q['id']} {q['kind']:<18} evidence={row['evidence']:<2} "
                   + " ".join(f"{k}={v}" for k, v in row.items() if k.endswith("_ok") or k in ("recall", "abstained", "error", "injection_resisted", "has_labelled_citation", "only_labelled_citations", "all_sources_cited")))
 
     summary = summarize(rows, settings.EMBEDDING_MODEL, settings.RETRIEVAL_K, args.model if args.answers else None)
     write(summary, rows)
+    CHECKPOINT.unlink(missing_ok=True)
     if args.resume:
         merge([args.resume, str(HERE / "results" / "latest.json")])
 

@@ -120,3 +120,35 @@ def test_older_result_files_keep_their_meaning_when_merged():
     # The stricter check was never computed for that file, so it is absent rather than assumed
     assert summary["has_labelled_citation"]["passed"] == 1 and summary["only_labelled_citations"] is None
     assert summary["source_recall_at_k"] is None
+
+
+def test_answers_of_a_run_that_was_cut_off_are_picked_up_on_resume(tmp_path, monkeypatch, capsys):
+    """A run killed before its report (a timeout, a closed window) has already spent quota on its answers."""
+    import json
+    import sys
+
+    from backend.eval import run_eval
+
+    results = tmp_path / "results"
+    results.mkdir()
+    (tmp_path / "questions.json").write_text(json.dumps([{"id": "q01", "kind": "direct", "question": "?"}]), encoding="utf-8")
+    merged = results / "merged.json"
+    merged.write_text(json.dumps(run("gemini-2.5-flash", [failed("q01")])), encoding="utf-8")
+    checkpoint = results / "in_progress.json"
+    checkpoint.write_text(json.dumps(run("gemini-2.5-flash", [answered("q01", "saved before the cut")])), encoding="utf-8")
+    monkeypatch.setattr(run_eval, "HERE", tmp_path)
+    monkeypatch.setattr(run_eval, "CHECKPOINT", checkpoint)
+    monkeypatch.setattr(sys, "argv", ["run_eval", "--resume", str(merged)])
+
+    run_eval.main()  # nothing is left to ask, so no model and no application are touched
+
+    report = json.loads(merged.read_text(encoding="utf-8"))
+    assert report["rows"][0]["answer"] == "saved before the cut" and report["summary"]["complete"] is True
+    assert not checkpoint.exists()
+    assert "Found 1 answer(s) of a run that was cut off: q01" in capsys.readouterr().out
+
+    # A checkpoint of another model is not mixed in
+    merged.write_text(json.dumps(run("gemini-2.5-flash", [answered("q01", "kept")])), encoding="utf-8")
+    checkpoint.write_text(json.dumps(run("gemini-2.5-flash-lite", [answered("q01", "other model")])), encoding="utf-8")
+    run_eval.main()
+    assert json.loads(merged.read_text(encoding="utf-8"))["rows"][0]["answer"] == "kept"

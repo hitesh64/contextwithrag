@@ -84,12 +84,14 @@ on `gemini-2.5-flash`. The key's daily generation quota ended it early, so it is
 | Questions with all their labelled sources in the top 1 / 3 / 6 passages | 19 / 21, 21 / 21, 21 / 21 |
 | Source recall at 1 / 3 / 6 (labelled sources retrieved / labelled sources) | 23 / 25, 25 / 25, 25 / 25 |
 | Cross-factory retrieval blocked | 1 / 1 |
-| Questions answered | 10 of 26 (8 by the model; q20 and q26 need no model call) |
-| Stopped by quota (HTTP 429) | 16: q06, q08, q10, q12-q19, q21-q25 |
-| Of the 9 answered questions with labelled sources: citation correct, all sources cited | 9 / 9, 9 / 9 |
-| Expected facts present | 9 / 9 (8 / 9 under the first, cruder check; see below) |
+| Questions answered | 14 of 26 after two days (10 on 12 October, 4 on 13 October; q20 and q26 need no model call) |
+| Still stopped by quota (HTTP 429) | 12: q08, q10, q12, q14-q19, q23-q25 |
+| Of the 11 answered questions with labelled sources: at least one labelled source cited, all labelled sources cited | 11 / 11, 11 / 11 |
+| Only labelled sources cited (stored only for the 2 answers of 13 October) | 2 / 2 |
+| Expected facts present | 11 / 11 (q05 failed the first, cruder check; see below) |
 | Conflict flagged (q20, by the backend, no model call) | 1 / 1 |
-| Abstention, prompt injection | not measured: q21-q25 never ran |
+| Abstains when no answer exists | 3 / 3 so far (q21, q22, q26); q23 and q24 not run |
+| Prompt injection | not measured: q25 has not run |
 
 **Why it stopped.** Google's error names the limit: `GenerateRequestsPerDayPerProjectPerModel-FreeTier`,
 20 requests a day per project and model. Of 26 questions 24 need a model call (q20 and q26 do not),
@@ -107,18 +109,21 @@ or "170" does not pass as "70" (before, "5" was found inside "15"). The stricter
 applies to every question; the nine answers of this run pass it. Rows are scored again with the
 current labels when runs are merged.
 
-Nothing about abstention or prompt-injection resistance can be claimed from this run. To finish
-it, run the 16 missing questions on the same model after the quota resets, without changing the
-answering code in between, and merge:
+Nothing about prompt-injection resistance can be claimed yet, and abstention rests on three
+questions. On 13 October only 4 of the 16 open questions were answered before the same daily limit
+returned; what used the rest of that day's 20 requests is not known (another program using a key of
+the same Google project would do it). To finish, repeat this after the quota resets, without
+changing the answering code in between. It asks only what is still unanswered and merges:
 
 ```bash
-.venv\Scripts\python.exe -m backend.eval.run_eval --answers --delay 13 --model gemini-2.5-flash --only q06,q08,q10,q12,q13,q14,q15,q16,q17,q18,q19,q21,q22,q23,q24,q25
-.venv\Scripts\python.exe -m backend.eval.run_eval --merge backend/eval/results/2026-10-12_flash_single-model_partial.json backend/eval/results/latest.json
+.venv\Scripts\python.exe -m backend.eval.run_eval --resume backend/eval/results/merged.json --delay 13
 ```
 
 The merge writes `results/merged.json`. It keeps each question once, never lets a quota error
 replace an answer, lists `questions_missing` and `questions_with_model_error`, and refuses runs
-that differ in generation model, embedding model or retrieval depth (tests in
+that differ in generation model, embedding model or retrieval depth. Every answer is written to
+`results/in_progress.json` as it arrives and picked up by the next `--resume`, so a run that is cut
+off does not lose the requests it spent (tests in
 `backend/tests/test_eval_tools.py`). It prints COMPLETE, and sets `complete: true`, only when all
 26 questions are present once and both lists are empty.
 
@@ -180,7 +185,7 @@ Per-question details of this run: `backend/eval/results/2026-10-12_*.json` (not 
 
 ## What the automated tests already establish
 
-These hold regardless of the model, because the backend enforces them (68 tests, all passing):
+These hold regardless of the model, because the backend enforces them (69 tests, all passing):
 
 - A user of one factory cannot read, cite, download, edit or delete another factory's assets,
   documents, breakdowns, work orders or audit events.
