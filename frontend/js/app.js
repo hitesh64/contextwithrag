@@ -755,7 +755,7 @@ pages.users = async () => {
       { title: 'Name', cell: u => esc(u.name) }, { title: 'Email', cell: u => esc(u.email) },
       { title: 'Role', cell: u => esc(ROLE_NAMES[u.role]) }, { title: 'Access', cell: access },
       { title: 'Status', cell: u => badge(u.is_active ? 'active' : 'inactive') },
-      { title: '', cell: u => u.id === me.id ? '<span class="muted">you</span>' : `<div class="actions">
+      { title: '', cell: u => u.id === me.id ? '<span class="muted" title="Your own account">Admin</span>' : `<div class="actions">
           <button class="btn small" data-action="role" data-id="${esc(u.id)}">Change role</button>
           ${u.role === 'admin' ? '' : `<button class="btn small" data-action="access" data-id="${esc(u.id)}">Access</button>`}
           <button class="btn small ${u.is_active ? 'danger' : ''}" data-action="toggle-user" data-id="${esc(u.id)}" data-active="${u.is_active}">${u.is_active ? 'Deactivate' : 'Activate'}</button></div>` },
