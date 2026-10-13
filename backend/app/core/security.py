@@ -1,4 +1,4 @@
-"""Authentication (bcrypt + server-side login sessions) and role checks.
+"""Authentication (bcrypt + server-side login sessions), roles and per-user permissions.
 
 On login the server creates a random token and stores only its SHA-256 hash in MongoDB with
 an expiry. Logging out or deactivating a user invalidates the token immediately.
@@ -90,6 +90,79 @@ def require_role(minimum: str):
         if not has_role(user, minimum):
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN, f"This needs the role '{minimum}' or higher; yours is '{user['role']}'."
+            )
+        return user
+
+    return dependency
+
+
+# What a user can be allowed to do: key -> (group shown to the administrator, label, lowest role that has it by default).
+# "<section>.view" decides whether the section is visible at all; the other keys are actions inside it.
+PERMISSIONS = {
+    "dashboard.view": ("Dashboard", "See the dashboard", "viewer"),
+    "dashboard.unanswered": ("Dashboard", "See the questions the records could not answer", "maintenance_manager"),
+    "chat.ask": ("Ask", "Ask questions", "viewer"),
+    "assets.view": ("Assets", "See assets", "viewer"),
+    "assets.manage": ("Assets", "Add, edit and archive assets", "maintenance_manager"),
+    "documents.view": ("Documents", "See documents", "viewer"),
+    "documents.manage": ("Documents", "Upload, reprocess and delete documents", "maintenance_manager"),
+    "breakdowns.view": ("Breakdowns", "See breakdowns", "viewer"),
+    "breakdowns.report": ("Breakdowns", "Report and update breakdowns", "technician"),
+    "breakdowns.import": ("Breakdowns", "Import breakdowns from a file", "maintenance_manager"),
+    "work_orders.view": ("Work orders", "See work orders", "viewer"),
+    "work_orders.draft": ("Work orders", "Draft, edit and submit work orders", "technician"),
+    "work_orders.approve": ("Work orders", "Approve, reject and cancel work orders", "maintenance_manager"),
+    "work_orders.execute": ("Work orders", "Start and complete approved work orders", "technician"),
+    "conflicts.view": ("Conflicts", "See conflicts", "viewer"),
+    "conflicts.resolve": ("Conflicts", "Record the decision that closes a conflict", "maintenance_manager"),
+    "audit.view": ("Audit history", "See the audit history", "maintenance_manager"),
+}
+# Managing users stays with the administrator role and cannot be handed out, so nobody can grant themselves more
+ADMIN_ONLY = ["users.manage"]
+
+
+def role_permissions(role: str) -> list[str]:
+    """What a role may do when the administrator has not chosen permissions for the user."""
+    if role == "admin":
+        return [*PERMISSIONS, *ADMIN_ONLY]
+    lowest = {key: needed for key, (_, _, needed) in PERMISSIONS.items()}
+    lowest["conflicts.resolve"] = settings.CONFLICT_RESOLVE_ROLE
+    return [key for key in PERMISSIONS if ROLES.index(role) >= ROLES.index(lowest[key])]
+
+
+def with_implied(keys: list[str]) -> list[str]:
+    """The chosen permissions in catalogue order; an action inside a section also makes that section visible."""
+    chosen = set(keys)
+    chosen |= {f"{k.split('.')[0]}.view" for k in keys if f"{k.split('.')[0]}.view" in PERMISSIONS}
+    return [key for key in PERMISSIONS if key in chosen]
+
+
+def permissions_of(user: dict) -> list[str]:
+    """The user's own list if the administrator set one, otherwise what the role gives. An administrator has everything."""
+    custom = user.get("permissions")
+    if user["role"] == "admin" or custom is None:
+        return role_permissions(user["role"])
+    return [key for key in custom if key in PERMISSIONS]
+
+
+def has_permission(user: dict, *keys: str) -> bool:
+    """True if the user holds at least one of the permissions."""
+    held = permissions_of(user)
+    return any(key in held for key in keys)
+
+
+def permission_label(key: str) -> str:
+    return PERMISSIONS[key][1]
+
+
+def require_permission(*keys: str):
+    """Dependency: the logged-in user, who must hold at least one of these permissions."""
+
+    def dependency(user: dict = Depends(get_current_user)) -> dict:
+        if not has_permission(user, *keys):
+            wanted = " or ".join(f"'{permission_label(k)}'" for k in keys)
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, f"You do not have the permission {wanted}. Ask an administrator for access."
             )
         return user
 

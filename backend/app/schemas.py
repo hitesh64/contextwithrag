@@ -36,12 +36,16 @@ class UserCreate(Body):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     role: Role
+    # Left out: what the role gives. The server checks every key against its own catalogue.
+    permissions: list[str] | None = Field(None, max_length=50)
 
 
 class UserUpdate(Body):
     name: str | None = Field(None, min_length=2, max_length=80)
     role: Role | None = None
     is_active: bool | None = None
+    # A list: this user's own permissions. null: back to what the role gives.
+    permissions: list[str] | None = Field(None, max_length=50)
 
 
 class AssetCreate(Body):

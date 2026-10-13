@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..core.database import work_orders
-from ..core.security import get_current_user, require_role
+from ..core.security import require_permission
 from ..core.utils import clean, now, oid, paginate
 from ..schemas import CommentIn, TransitionIn, WorkOrderCreate, WorkOrderGenerate, WorkOrderUpdate
 from ..services import audit_service, llm, work_order_service
@@ -33,7 +33,7 @@ def list_work_orders(
     asset_id: str = "",
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_permission("work_orders.view")),
 ):
     query: dict = {"organization_id": user["organization_id"]}
     if status_:
@@ -44,7 +44,7 @@ def list_work_orders(
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_work_order(body: WorkOrderCreate, user: dict = Depends(require_role("technician"))):
+def create_work_order(body: WorkOrderCreate, user: dict = Depends(require_permission("work_orders.draft"))):
     """A draft written by hand."""
     asset = get_asset(user["organization_id"], body.asset_id)
     order = work_order_service.new_work_order(
@@ -56,7 +56,7 @@ def create_work_order(body: WorkOrderCreate, user: dict = Depends(require_role("
 
 
 @router.post("/generate", status_code=status.HTTP_201_CREATED)
-def generate_work_order(body: WorkOrderGenerate, user: dict = Depends(require_role("technician"))):
+def generate_work_order(body: WorkOrderGenerate, user: dict = Depends(require_permission("work_orders.draft"))):
     """A draft generated from the asset's SOPs and breakdown history. It only creates a draft record."""
     ai_limiter.check(user["id"])
     asset = get_asset(user["organization_id"], body.asset_id)
@@ -69,18 +69,20 @@ def generate_work_order(body: WorkOrderGenerate, user: dict = Depends(require_ro
 
 
 @router.get("/{order_id}")
-def view_work_order(order_id: str, user: dict = Depends(get_current_user)):
+def view_work_order(order_id: str, user: dict = Depends(require_permission("work_orders.view"))):
     return _out(_get(user["organization_id"], order_id), user)
 
 
 @router.patch("/{order_id}")
-def edit_work_order(order_id: str, body: WorkOrderUpdate, user: dict = Depends(require_role("technician"))):
+def edit_work_order(
+    order_id: str, body: WorkOrderUpdate, user: dict = Depends(require_permission("work_orders.draft", "work_orders.approve"))
+):
     """Edit a draft. Once submitted, a work order is frozen so that what was approved is what gets done."""
     order = _get(user["organization_id"], order_id)
     if not work_order_service.may_edit(user, order):
         raise HTTPException(
             status.HTTP_409_CONFLICT if order["status"] not in ("draft", "rejected") else status.HTTP_403_FORBIDDEN,
-            "Only a draft can be edited, by its author or a manager.",
+            "Only a draft can be edited, by its author or someone who may approve work orders.",
         )
     changes = body.model_dump(exclude_none=True, exclude={"checklist"})
     if body.checklist is not None:
@@ -93,12 +95,14 @@ def edit_work_order(order_id: str, body: WorkOrderUpdate, user: dict = Depends(r
 
 
 @router.post("/{order_id}/approve")
-def approve_work_order(order_id: str, body: CommentIn | None = None, user: dict = Depends(get_current_user)):
+def approve_work_order(
+    order_id: str, body: CommentIn | None = None, user: dict = Depends(require_permission("work_orders.view"))
+):
     order = _get(user["organization_id"], order_id)
     return _out(work_order_service.transition(user, order, "approved", body.comment if body else ""), user)
 
 
 @router.post("/{order_id}/transition")
-def transition_work_order(order_id: str, body: TransitionIn, user: dict = Depends(get_current_user)):
+def transition_work_order(order_id: str, body: TransitionIn, user: dict = Depends(require_permission("work_orders.view"))):
     order = _get(user["organization_id"], order_id)
     return _out(work_order_service.transition(user, order, body.to, body.comment), user)

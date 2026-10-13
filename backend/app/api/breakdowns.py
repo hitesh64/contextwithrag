@@ -11,7 +11,7 @@ from openpyxl import load_workbook
 
 from ..core.config import settings
 from ..core.database import assets, breakdowns, next_number
-from ..core.security import get_current_user, require_role
+from ..core.security import get_current_user, require_permission
 from ..core.utils import clean, now, oid, paginate
 from ..schemas import BreakdownCreate, BreakdownUpdate
 from ..services import audit_service
@@ -152,7 +152,7 @@ def import_template(_: dict = Depends(get_current_user)):
 def import_breakdowns(
     file: UploadFile = File(...),
     dry_run: bool = Query(False, description="Validate only; store nothing"),
-    user: dict = Depends(require_role("maintenance_manager")),
+    user: dict = Depends(require_permission("breakdowns.import")),
 ):
     """Import the valid rows and report every rejected row with its reason.
 
@@ -209,7 +209,7 @@ def list_breakdowns(
     date_to: datetime | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_permission("breakdowns.view")),
 ):
     query: dict = {"organization_id": user["organization_id"]}
     if asset_id:
@@ -229,7 +229,7 @@ def list_breakdowns(
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_breakdown(body: BreakdownCreate, user: dict = Depends(require_role("technician"))):
+def create_breakdown(body: BreakdownCreate, user: dict = Depends(require_permission("breakdowns.report"))):
     asset = get_asset(user["organization_id"], body.asset_id)
     fields = body.model_dump(exclude={"asset_id"})
     fields["reported_at"] = _aware(fields["reported_at"])
@@ -246,7 +246,7 @@ def _aware(value: datetime) -> datetime:
 
 
 @router.patch("/{breakdown_id}")
-def update_breakdown(breakdown_id: str, body: BreakdownUpdate, user: dict = Depends(require_role("technician"))):
+def update_breakdown(breakdown_id: str, body: BreakdownUpdate, user: dict = Depends(require_permission("breakdowns.report"))):
     record = breakdowns.find_one({"_id": oid(breakdown_id), "organization_id": user["organization_id"]})
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Breakdown record not found")

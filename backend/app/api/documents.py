@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 
 from ..core.config import settings
 from ..core.database import assets, documents
-from ..core.security import get_current_user, require_role
+from ..core.security import require_permission
 from ..core.utils import clean, now, oid, paginate
 from ..schemas import DocumentVersionUpdate
 from ..services import audit_service, ingestion, retrieval
@@ -31,7 +31,7 @@ def upload_document(
     file: UploadFile = File(...),
     doc_type: str = Form("manual"),
     asset_ids: str = Form("", description="Comma-separated ids of the assets this document belongs to; empty: general"),
-    user: dict = Depends(require_role("maintenance_manager")),
+    user: dict = Depends(require_permission("documents.manage")),
 ):
     """Store the file and start processing in the background. Poll GET /documents/{id} for its status."""
     org = user["organization_id"]
@@ -91,7 +91,7 @@ def list_documents(
     asset_id: str = "",
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_permission("documents.view")),
 ):
     query: dict = {"organization_id": user["organization_id"]}
     if status_:
@@ -102,12 +102,15 @@ def list_documents(
 
 
 @router.get("/{document_id}")
-def view_document(document_id: str, user: dict = Depends(get_current_user)):
+def view_document(document_id: str, user: dict = Depends(require_permission("documents.view"))):
     return clean(get_document(user["organization_id"], document_id))
 
 
 @router.get("/{document_id}/file")
-def download_document(document_id: str, user: dict = Depends(get_current_user)):
+def download_document(
+    document_id: str, user: dict = Depends(require_permission("documents.view", "chat.ask", "work_orders.view"))
+):
+    # Also for people who only ask questions or read work orders: their answers cite these files
     """The original file, for opening a citation. Served only through this authenticated endpoint."""
     doc = get_document(user["organization_id"], document_id)
     path = ingestion.stored_path(doc["storage_key"])
@@ -118,7 +121,7 @@ def download_document(document_id: str, user: dict = Depends(get_current_user)):
 
 @router.post("/{document_id}/reprocess", status_code=status.HTTP_202_ACCEPTED)
 def reprocess_document(
-    document_id: str, background: BackgroundTasks, user: dict = Depends(require_role("maintenance_manager"))
+    document_id: str, background: BackgroundTasks, user: dict = Depends(require_permission("documents.manage"))
 ):
     """Run processing again, e.g. after a failure. Existing chunks are replaced, so nothing is duplicated."""
     doc = get_document(user["organization_id"], document_id)
@@ -131,7 +134,7 @@ def reprocess_document(
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_document(document_id: str, user: dict = Depends(require_role("maintenance_manager"))):
+def delete_document(document_id: str, user: dict = Depends(require_permission("documents.manage"))):
     """Remove the indexed chunks, the stored file and the record, in that order.
 
     The chunks go first: if a later step fails the document can no longer be cited, and the
@@ -152,7 +155,7 @@ def delete_document(document_id: str, user: dict = Depends(require_role("mainten
 
 @router.patch("/{document_id}/version")
 def update_version(
-    document_id: str, body: DocumentVersionUpdate, user: dict = Depends(require_role("maintenance_manager"))
+    document_id: str, body: DocumentVersionUpdate, user: dict = Depends(require_permission("documents.manage"))
 ):
     """Record which revision a document is and whether it is superseded.
 

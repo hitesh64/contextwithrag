@@ -4,7 +4,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, Query
 
 from ..core.database import assets, audit_events, breakdowns, chat_logs, documents, work_orders
-from ..core.security import get_current_user, require_role
+from ..core.security import require_permission
 from ..core.utils import now, paginate
 
 router = APIRouter(tags=["audit"])
@@ -17,7 +17,7 @@ def list_audit(
     result: str = "",
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    user: dict = Depends(require_role("maintenance_manager")),
+    user: dict = Depends(require_permission("audit.view")),
 ):
     query: dict = {"organization_id": user["organization_id"]}
     if action:
@@ -37,7 +37,7 @@ def _count_by(collection, organization_id: str, field: str) -> dict:
 
 
 @router.get("/dashboard")
-def dashboard(days: int = Query(90, ge=7, le=730), user: dict = Depends(get_current_user)):
+def dashboard(days: int = Query(90, ge=7, le=730), user: dict = Depends(require_permission("dashboard.view"))):
     org = user["organization_id"]
     since = now() - timedelta(days=days)
     downtime = list(breakdowns.aggregate([

@@ -8,7 +8,7 @@ that evidence, and requires a manager's approval before a work order can be carr
 
 | Area | What it does |
 |---|---|
-| Factories and users | Each factory is its own workspace. Roles: viewer, technician, maintenance manager, administrator. |
+| Factories and users | Each factory is its own workspace. Roles: viewer, technician, maintenance manager, administrator. A role gives a standard set of access; under Users → Access the administrator can choose for one user which sections are visible and what that user may do (for example who may approve work orders or close conflicts). The backend enforces the same list, so a hidden section is also refused by the API. Managing users stays with the administrator. |
 | Assets | Create, search, edit and archive machines. Asset codes are unique inside a factory. |
 | Documents | Upload PDF, DOCX, PPTX, TXT, MD. Files are validated, stored privately, chunked and indexed in the background. Statuses: queued, processing, ready, failed. Reprocess and delete. |
 | Ask | Hybrid search (vectors + BM25) inside the user's own factory only. Answers cite numbered evidence; names, pages and record numbers in a citation come from stored data, not from the model. No evidence, or no valid citation, gives an explicit "not found" instead of an answer. |

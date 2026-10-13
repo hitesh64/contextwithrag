@@ -35,7 +35,8 @@ const badge = value => (value ? `<span class="badge ${STATUS_STYLE[value] || ''}
 const when = value => (value ? new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—');
 const day = value => (value ? new Date(value).toLocaleDateString([], { dateStyle: 'medium' }) : '—');
 const shown = value => (value === null || value === undefined || value === '' ? '<span class="muted">not recorded</span>' : esc(value));
-const can = role => me && ROLES.indexOf(me.role) >= ROLES.indexOf(role);
+// The server sends what this user may do; it enforces the same list itself, so this only decides what is drawn
+const can = permission => Boolean(me) && me.permissions.includes(permission);
 
 function toast(message, bad = false) {
   const el = document.createElement('div');
@@ -129,6 +130,9 @@ function formDialog({ title, fields = [], submitLabel = 'Save', note = '', tone 
           return `<option value="${esc(value)}" ${selected}>${esc(text)}</option>`;
         }).join('');
         input = `<select name="${f.name}" ${required} ${f.multiple ? 'multiple' : ''}>${options}</select>`;
+      } else if (f.type === 'checks') {
+        return `<fieldset class="checks"><legend>${esc(f.label)}</legend>${f.options.map(([value, text]) =>
+          `<label class="check"><input type="checkbox" name="${f.name}" value="${esc(value)}" ${(f.value || []).includes(value) ? 'checked' : ''}>${esc(text)}</label>`).join('')}</fieldset>`;
       } else if (f.type === 'textarea') {
         input = `<textarea name="${f.name}" rows="${f.rows || 4}" ${required} maxlength="${f.maxlength || 5000}">${esc(f.value)}</textarea>`;
       } else {
@@ -153,7 +157,8 @@ function formDialog({ title, fields = [], submitLabel = 'Save', note = '', tone 
       const values = {};
       for (const f of fields) {
         const el = form.elements[f.name];
-        if (f.type === 'file') values[f.name] = el.files[0];
+        if (f.type === 'checks') values[f.name] = [...form.querySelectorAll(`input[name="${f.name}"]:checked`)].map(i => i.value);
+        else if (f.type === 'file') values[f.name] = el.files[0];
         else if (f.multiple) values[f.name] = [...el.selectedOptions].map(o => o.value);
         else if (f.type === 'number') values[f.name] = el.value === '' ? null : Number(el.value);
         else values[f.name] = el.value.trim();
@@ -175,8 +180,8 @@ const confirmDialog = (title, note, submitLabel = 'Confirm', tone = 'info') =>
   formDialog({ title, note, submitLabel, tone, submit: async () => true });
 
 async function assetOptions() {
-  const data = await api('/assets', { params: { page_size: 200 } });
-  return data.items.map(a => [a.id, `${a.asset_code} — ${a.name}`]);
+  const found = await api('/assets/options');
+  return found.map(a => [a.id, `${a.asset_code} — ${a.name}`]);
 }
 
 /** Open an original document through the authenticated API (there is no public file URL). */
@@ -207,13 +212,13 @@ const withRefs = text => esc(text).replace(/\[(\d+(?:, \d+)*)\]/g, '<span class=
 
 // ---------- pages ----------
 
-// [page, label, minimum role, icon, sidebar section]
+// [page, label, permission that makes the section visible, icon, sidebar section]
 const NAV = [
-  ['dashboard', 'Dashboard', 'viewer', 'gauge-high', 'Main'], ['chat', 'Ask', 'viewer', 'comments', 'Main'],
-  ['assets', 'Assets', 'viewer', 'industry', 'Maintenance'], ['documents', 'Documents', 'viewer', 'book-open', 'Maintenance'],
-  ['breakdowns', 'Breakdowns', 'viewer', 'triangle-exclamation', 'Maintenance'], ['work-orders', 'Work orders', 'viewer', 'clipboard-list', 'Maintenance'],
-  ['conflicts', 'Conflicts', 'viewer', 'code-compare', 'Maintenance'],
-  ['audit', 'Audit history', 'maintenance_manager', 'clock-rotate-left', 'Administration'], ['users', 'Users', 'admin', 'users', 'Administration'],
+  ['dashboard', 'Dashboard', 'dashboard.view', 'gauge-high', 'Main'], ['chat', 'Ask', 'chat.ask', 'comments', 'Main'],
+  ['assets', 'Assets', 'assets.view', 'industry', 'Maintenance'], ['documents', 'Documents', 'documents.view', 'book-open', 'Maintenance'],
+  ['breakdowns', 'Breakdowns', 'breakdowns.view', 'triangle-exclamation', 'Maintenance'], ['work-orders', 'Work orders', 'work_orders.view', 'clipboard-list', 'Maintenance'],
+  ['conflicts', 'Conflicts', 'conflicts.view', 'code-compare', 'Maintenance'],
+  ['audit', 'Audit history', 'audit.view', 'clock-rotate-left', 'Administration'], ['users', 'Users', 'users.manage', 'users', 'Administration'],
 ];
 const fa = name => `<i class="fa-solid fa-${name}"></i>`;
 
@@ -242,18 +247,18 @@ pages.dashboard = async (_, query) => {
     <div class="page-head"><h1>Dashboard</h1>
       <label>Period <select id="days">${[['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last 12 months']].map(([v, t]) => `<option value="${v}" ${v === days ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div>
     <div class="grid">
-      ${stat(sum(d.assets) - (d.assets.archived || 0), 'Assets in the register', '#/assets', 'blue', 'industry')}
-      ${stat(d.documents.ready || 0, 'Documents ready to search', '#/documents', 'green', 'book-open')}
-      ${stat(d.documents.failed || 0, 'Documents that failed processing', '#/documents?status=failed', 'red', 'file-circle-xmark')}
-      ${stat((d.breakdowns.open || 0) + (d.breakdowns.in_progress || 0), 'Unresolved breakdowns', '#/breakdowns?status=open', 'amber', 'triangle-exclamation')}
-      ${stat(d.work_orders.pending_approval || 0, 'Work orders awaiting approval', '#/work-orders?status=pending_approval', 'purple', 'clipboard-check')}
+      ${can('assets.view') ? stat(sum(d.assets) - (d.assets.archived || 0), 'Assets in the register', '#/assets', 'blue', 'industry') : ''}
+      ${can('documents.view') ? stat(d.documents.ready || 0, 'Documents ready to search', '#/documents', 'green', 'book-open')
+        + stat(d.documents.failed || 0, 'Documents that failed processing', '#/documents?status=failed', 'red', 'file-circle-xmark') : ''}
+      ${can('breakdowns.view') ? stat((d.breakdowns.open || 0) + (d.breakdowns.in_progress || 0), 'Unresolved breakdowns', '#/breakdowns?status=open', 'amber', 'triangle-exclamation') : ''}
+      ${can('work_orders.view') ? stat(d.work_orders.pending_approval || 0, 'Work orders awaiting approval', '#/work-orders?status=pending_approval', 'purple', 'clipboard-check') : ''}
       ${stat(`${d.questions_unanswered} / ${d.questions_asked}`, `Questions without evidence (${period})`, '#/dashboard', 'teal', 'circle-question')}
     </div>
     <div class="chart-grid"><div class="card"><h2>${fa('chart-bar')}Downtime by asset</h2>
       <p class="hint">Recorded downtime in minutes, breakdowns reported ${esc(period)}. Records without a downtime value count as 0.</p>
       ${d.downtime_by_asset.length ? '<div class="chart-box"><canvas id="downtime" aria-label="Downtime by asset" role="img"></canvas></div>' : '<div class="empty">No breakdowns recorded in this period.</div>'}
     </div>
-    ${can('maintenance_manager') ? `<div class="card" id="unanswered"><h2>${fa('circle-question')}Questions the records could not answer</h2>
+    ${can('dashboard.unanswered') ? `<div class="card" id="unanswered"><h2>${fa('circle-question')}Questions the records could not answer</h2>
       <p class="hint">Each one points at a manual, SOP or record that is missing from the library.</p><div id="unanswered-list"></div></div>` : ''}</div>`;
   $('#days').onchange = event => { location.hash = `#/dashboard?days=${event.target.value}`; };
 
@@ -277,7 +282,7 @@ pages.dashboard = async (_, query) => {
       ], d.downtime_by_asset);
     }
   }
-  if (can('maintenance_manager')) {
+  if (can('dashboard.unanswered')) {
     const missing = await api('/chat/unanswered', { params: { page_size: 10 } });
     $('#unanswered-list').innerHTML = table([
       { title: 'Asked', cell: q => when(q.created_at) }, { title: 'By', cell: q => esc(q.user_name) }, { title: 'Question', cell: q => esc(q.question) },
@@ -350,7 +355,7 @@ pages.assets = async (id, query) => {
   const data = await api('/assets', { params });
   page().innerHTML = `
     <div class="page-head"><h1>Asset register</h1>
-      ${can('maintenance_manager') ? '<button class="btn primary" data-action="add-asset">Add asset</button>' : ''}</div>
+      ${can('assets.manage') ? '<button class="btn primary" data-action="add-asset">Add asset</button>' : ''}</div>
     <form class="filters" id="filters">
       <label>Search<input name="q" value="${esc(params.q)}" placeholder="Code, name, location…"></label>
       <label>Status<select name="status">${[['', 'In use (not archived)'], ['active', 'Active'], ['under_maintenance', 'Under maintenance'], ['inactive', 'Inactive'], ['archived', 'Archived']].map(([v, t]) => `<option value="${v}" ${v === params.status ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
@@ -383,14 +388,14 @@ async function assetDetail(id) {
   const records = list => list.map(r => `<a href="#/breakdowns?asset_id=${esc(a.id)}">${esc(r.record_no)}</a>`).join(', ');
   const repeats = (title, groups) => groups.length ? `<h3>${title}</h3><ul>${groups.map(g =>
     `<li><b>${esc(g.label)}</b> — ${g.count} times, ${g.downtime_minutes} min downtime · records ${records(g.records)}</li>`).join('')}</ul>` : '';
-  const gaps = s.data_gaps;
+  const gaps = s && s.data_gaps;
   page().innerHTML = `
     <div class="page-head"><div><a href="#/assets">← Assets</a><h1>${esc(a.asset_code)} — ${esc(a.name)}</h1></div>
       <div class="actions">
-        <a class="btn" href="#/chat?asset=${esc(a.id)}">Ask about this asset</a>
-        ${can('technician') ? '<button class="btn primary" data-action="draft-wo">Draft work order</button>' : ''}
-        ${can('maintenance_manager') ? '<button class="btn" data-action="edit-asset">Edit</button>' : ''}
-        ${can('maintenance_manager') && a.status !== 'archived' ? '<button class="btn danger" data-action="archive-asset">Archive</button>' : ''}
+        ${can('chat.ask') ? `<a class="btn" href="#/chat?asset=${esc(a.id)}">Ask about this asset</a>` : ''}
+        ${can('work_orders.draft') ? '<button class="btn primary" data-action="draft-wo">Draft work order</button>' : ''}
+        ${can('assets.manage') ? '<button class="btn" data-action="edit-asset">Edit</button>' : ''}
+        ${can('assets.manage') && a.status !== 'archived' ? '<button class="btn danger" data-action="archive-asset">Archive</button>' : ''}
       </div></div>
     <div class="two-col">
       <div class="card"><h2>${fa('circle-info')}Details</h2><dl class="kv">
@@ -398,7 +403,7 @@ async function assetDetail(id) {
         <dt>Type</dt><dd>${shown(a.asset_type)}</dd><dt>Manufacturer</dt><dd>${shown(a.manufacturer)}</dd>
         <dt>Model</dt><dd>${shown(a.model)}</dd><dt>Serial number</dt><dd>${shown(a.serial_number)}</dd>
         <dt>Location</dt><dd>${shown(a.location)}</dd></dl></div>
-      <div class="card"><h2>${fa('chart-simple')}Breakdown history: recorded facts</h2>
+      ${s ? `<div class="card"><h2>${fa('chart-simple')}Breakdown history: recorded facts</h2>
         ${s.total_records ? `<dl class="kv">
           <dt>Records</dt><dd>${s.total_records} (${s.open_records} unresolved)</dd>
           <dt>Recorded downtime</dt><dd>${s.total_downtime_minutes} minutes</dd>
@@ -410,14 +415,14 @@ async function assetDetail(id) {
             ${gaps.downtime_not_recorded.length ? `Downtime not recorded in ${gaps.downtime_not_recorded.length} record(s) (${records(gaps.downtime_not_recorded)}).` : ''}</div>` : ''}
           <p class="hint">Counted directly from the breakdown records. No AI interpretation is involved here.</p>`
         : '<div class="empty">No breakdowns recorded for this asset.</div>'}
-      </div>
+      </div>` : ''}
     </div>
-    <div class="card"><h2>${fa('book-open')}Linked documents</h2>${table([
+    ${a.documents ? `<div class="card"><h2>${fa('book-open')}Linked documents</h2>${table([
       { title: 'File', cell: d => `<a href="#" data-action="open-doc" data-id="${esc(d.id)}">${esc(d.filename)}</a>` },
       { title: 'Type', cell: d => label(d.doc_type) }, { title: 'Status', cell: d => badge(d.status) },
-    ], a.documents, { empty: 'No document is linked to this asset. Upload its manual or SOP under Documents.' })}</div>
-    <div class="card"><h2>${fa('triangle-exclamation')}Recent breakdowns</h2>${breakdownTable(a.recent_breakdowns, false)}</div>
-    <div class="card"><h2>${fa('clipboard-list')}Work orders</h2>${workOrderTable(a.work_orders)}</div>`;
+    ], a.documents, { empty: 'No document is linked to this asset. Upload its manual or SOP under Documents.' })}</div>` : ''}
+    ${a.recent_breakdowns ? `<div class="card"><h2>${fa('triangle-exclamation')}Recent breakdowns</h2>${breakdownTable(a.recent_breakdowns, false)}</div>` : ''}
+    ${a.work_orders ? `<div class="card"><h2>${fa('clipboard-list')}Work orders</h2>${workOrderTable(a.work_orders)}</div>` : ''}`;
   actions['edit-asset'] = async () => {
     if (await formDialog({ title: `Edit ${a.asset_code}`, fields: ASSET_FIELDS(a), submit: values => api(`/assets/${id}`, { method: 'PATCH', body: values }) })) route();
   };
@@ -435,7 +440,7 @@ pages.documents = async (_, query) => {
   const names = Object.fromEntries(assets.map(([id, text]) => [id, text.split(' — ')[0]]));
   page().innerHTML = `
     <div class="page-head"><h1>Document library</h1>
-      ${can('maintenance_manager') ? '<button class="btn primary" data-action="upload">Upload document</button>' : ''}</div>
+      ${can('documents.manage') ? '<button class="btn primary" data-action="upload">Upload document</button>' : ''}</div>
     <form class="filters" id="filters"><label>Status<select name="status">${['', 'ready', 'queued', 'processing', 'failed'].map(v => `<option value="${v}" ${v === params.status ? 'selected' : ''}>${v ? label(v) : 'All'}</option>`).join('')}</select></label>
       <button class="btn" type="submit">Apply</button></form>
     ${table([
@@ -444,7 +449,7 @@ pages.documents = async (_, query) => {
       { title: 'Assets', cell: d => d.asset_ids.length ? d.asset_ids.map(i => esc(names[i] || 'archived asset')).join(', ') : '<span class="muted">General</span>' },
       { title: 'Status', cell: d => `${badge(d.status)}${d.error ? `<div class="hint" style="color:var(--bad)">${esc(d.error)}</div>` : ''}` },
       { title: 'Indexed', num: true, cell: d => d.status === 'ready' ? `${d.chunk_count} sections${d.page_count ? ` · ${d.page_count} pages` : ''}` : '—' },
-      { title: '', cell: d => can('maintenance_manager') ? `<div class="actions">
+      { title: '', cell: d => can('documents.manage') ? `<div class="actions">
           ${['failed', 'ready'].includes(d.status) ? `<button class="btn small" data-action="reprocess" data-id="${esc(d.id)}">Reprocess</button>` : ''}
           <button class="btn small danger" data-action="delete-doc" data-id="${esc(d.id)}" data-name="${esc(d.filename)}">Delete</button></div>` : '' },
     ], data.items, { empty: 'No documents yet. Upload a machine manual or SOP (PDF, DOCX, PPTX, TXT).' })}
@@ -490,7 +495,7 @@ function breakdownTable(rows, showAsset = true) {
     { title: 'Root cause', cell: b => shown(b.root_cause) },
     { title: 'Corrective action', cell: b => shown(b.corrective_action) },
     { title: 'Status', cell: b => badge(b.resolution_status) },
-    ...(can('technician') ? [{ title: '', cell: b => `<button class="btn small" data-action="edit-breakdown" data-id="${esc(b.id)}">Update</button>` }] : []),
+    ...(can('breakdowns.report') ? [{ title: '', cell: b => `<button class="btn small" data-action="edit-breakdown" data-id="${esc(b.id)}">Update</button>` }] : []),
   ], rows, { empty: 'No breakdown records match.' });
 }
 
@@ -520,8 +525,8 @@ pages.breakdowns = async (_, query) => {
   const data = await api('/breakdowns', { params: { ...params, page: query.get('page') || 1, date_to: params.date_to && params.date_to + 'T23:59:59' } });
   page().innerHTML = `
     <div class="page-head"><h1>Breakdown history</h1><div class="actions">
-      ${can('maintenance_manager') ? '<button class="btn" data-action="import">Import CSV / XLSX</button>' : ''}
-      ${can('technician') ? '<button class="btn primary" data-action="add-breakdown">Report breakdown</button>' : ''}</div></div>
+      ${can('breakdowns.import') ? '<button class="btn" data-action="import">Import CSV / XLSX</button>' : ''}
+      ${can('breakdowns.report') ? '<button class="btn primary" data-action="add-breakdown">Report breakdown</button>' : ''}</div></div>
     <form class="filters" id="filters">
       <label>Asset<select name="asset_id"><option value="">All</option>${assets.map(([id, text]) => `<option value="${esc(id)}" ${id === params.asset_id ? 'selected' : ''}>${esc(text)}</option>`).join('')}</select></label>
       <label>Status<select name="status">${['', 'open', 'in_progress', 'resolved'].map(v => `<option value="${v}" ${v === params.status ? 'selected' : ''}>${v ? label(v) : 'All'}</option>`).join('')}</select></label>
@@ -585,7 +590,7 @@ async function newWorkOrder(assetId) {
   if (!assets.length) return toast('Add an asset first.', true);
   const created = await formDialog({
     title: 'Draft a work order', submitLabel: 'Create draft',
-    note: 'With “Generate from records”, the draft is built from this asset’s SOPs and breakdown history and shows its sources. It is only a draft: nothing happens until a manager approves it.',
+    note: 'With “Generate from records”, the draft is built from this asset’s SOPs and breakdown history and shows its sources. It is only a draft: nothing happens until someone with approval access approves it.',
     fields: [
       { name: 'asset_id', label: 'Asset', type: 'select', options: assets, value: assetId || assets[0][0], required: true },
       { name: 'problem', label: 'Problem / job description', type: 'textarea', rows: 3, required: true, maxlength: 2000 },
@@ -605,7 +610,7 @@ pages['work-orders'] = async (id, query) => {
   const tabs = [['', 'All'], ['draft', 'Drafts'], ['pending_approval', 'Approval queue'], ['approved', 'Approved'], ['in_progress', 'In progress'], ['completed', 'Completed'], ['rejected', 'Rejected']];
   page().innerHTML = `
     <div class="page-head"><h1>Work orders</h1>
-      ${can('technician') ? '<button class="btn primary" data-action="new-wo">Draft work order</button>' : ''}</div>
+      ${can('work_orders.draft') ? '<button class="btn primary" data-action="new-wo">Draft work order</button>' : ''}</div>
     <div class="tabs">${tabs.map(([v, t]) => `<a class="tab ${v === status ? 'active' : ''}" href="#/work-orders${v ? '?status=' + v : ''}">${t}</a>`).join('')}</div>
     ${workOrderTable(data.items)}${pager(data, 'wo-page')}`;
   actions['wo-page'] = el => { query.set('page', el.dataset.page); location.hash = '#/work-orders?' + query; };
@@ -622,7 +627,7 @@ async function workOrderDetail(id) {
     <div class="page-head"><div><a href="#/work-orders">← Work orders</a><h1>${esc(w.order_no)} — ${esc(w.title)}</h1></div>
       <div class="actions">${w.can_edit ? '<button class="btn" data-action="edit-wo">Edit draft</button>' : ''}
         ${w.allowed_transitions.map(to => `<button class="btn ${['approved', 'pending_approval', 'in_progress', 'completed'].includes(to) ? 'primary' : to === 'draft' ? '' : 'danger'}" data-action="move" data-to="${to}">${MOVE_LABEL[to]}</button>`).join('')}</div></div>
-    ${w.status === 'draft' ? `<div class="notice">This is a draft${w.generated ? ' generated from your records' : ''}. Nothing is carried out until it is submitted and approved by a manager${w.generated ? '; check every step against its source first' : ''}.</div>` : ''}
+    ${w.status === 'draft' ? `<div class="notice">This is a draft${w.generated ? ' generated from your records' : ''}. Nothing is carried out until it is submitted and approved by someone with approval access${w.generated ? '; check every step against its source first' : ''}.</div>` : ''}
     <div class="two-col">
       <div class="card"><h2>${fa('circle-info')}Details</h2><dl class="kv">
         <dt>Status</dt><dd>${badge(w.status)}</dd><dt>Priority</dt><dd>${badge(w.priority)}</dd>
@@ -676,7 +681,7 @@ pages.conflicts = async (_, query) => {
   page().innerHTML = `
     <div class="page-head"><h1>Conflicts between documents</h1></div>
     <div class="notice">Found when a question was asked and two of your documents gave different values for the same instruction.
-      The assistant never picks one. A maintenance manager or administrator records which applies; everyone can see the decision.
+      The assistant never picks one. A person with access to close conflicts records which applies; everyone who sees this page sees the decision.
       A decision is reopened when one of the documents changes.</div>
     <form class="filters" id="filters">
       <label>Status<select name="status">${[['open', 'Open'], ['resolved', 'Resolved'], ['', 'All']].map(([v, t]) => `<option value="${v}" ${v === params.status ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
@@ -692,7 +697,7 @@ pages.conflicts = async (_, query) => {
         ${(c.notes || []).map(n => `<p class="hint">${esc(n)}</p>`).join('')}
         ${c.resolution ? `<p><b>Decision:</b> ${decisionText(c.resolution)} · ${esc(c.resolution.resolved_by_name)} · ${when(c.resolution.resolved_at)}<br>${esc(c.resolution.note)}</p>` : ''}
         <div class="actions"><span class="hint">Seen ${c.times_seen} time${c.times_seen === 1 ? '' : 's'}, last ${when(c.last_seen_at)}${(c.history || []).length ? ` · ${c.history.length} earlier decision${c.history.length === 1 ? '' : 's'}` : ''}</span>
-          ${c.status === 'open' && can('maintenance_manager') ? `<button class="btn primary small" data-action="resolve-conflict" data-id="${esc(c.id)}">Record a decision</button>` : ''}</div>
+          ${c.status === 'open' && can('conflicts.resolve') ? `<button class="btn primary small" data-action="resolve-conflict" data-id="${esc(c.id)}">Record a decision</button>` : ''}</div>
       </div>`).join('') : '<div class="empty">No conflicts match.</div>'}${pager(data, 'conflict-page')}`;
   $('#filters').onsubmit = event => { event.preventDefault(); location.hash = '#/conflicts?' + new URLSearchParams(new FormData(event.target)); };
   actions['conflict-page'] = el => { query.set('page', el.dataset.page); location.hash = '#/conflicts?' + query; };
@@ -736,22 +741,30 @@ pages.audit = async (_, query) => {
 };
 
 pages.users = async () => {
-  const data = await api('/users');
+  const [data, catalogue] = await Promise.all([api('/users'), api('/permissions')]);
   const roleOptions = ROLES.map(r => [r, ROLE_NAMES[r]]);
+  const groups = [...new Set(catalogue.permissions.map(p => p.group))];
+  const access = u => u.role === 'admin' ? 'Everything' : u.custom_permissions
+    ? `<b>Custom</b> · ${u.permissions.length} of ${catalogue.permissions.length}` : 'Standard for the role';
   page().innerHTML = `
     <div class="page-head"><h1>Users</h1><button class="btn primary" data-action="add-user">Add user</button></div>
-    <div class="notice">Viewer: read and ask. Technician: also report breakdowns, draft work orders and carry out approved ones.
-      Maintenance manager: also manage assets and documents, import records and approve work orders. Administrator: also manage users.</div>
+    <div class="notice">A role gives a standard set of access. Viewer: read and ask. Technician: also report breakdowns, draft work orders and carry out approved ones.
+      Maintenance manager: also manage assets and documents, import records, approve work orders and close conflicts. Administrator: everything, and manages users.
+      With <b>Access</b> you choose for one user which sections are visible and what that user may do, for example who may approve work orders.</div>
     ${table([
       { title: 'Name', cell: u => esc(u.name) }, { title: 'Email', cell: u => esc(u.email) },
-      { title: 'Role', cell: u => esc(ROLE_NAMES[u.role]) }, { title: 'Status', cell: u => badge(u.is_active ? 'active' : 'inactive') },
+      { title: 'Role', cell: u => esc(ROLE_NAMES[u.role]) }, { title: 'Access', cell: access },
+      { title: 'Status', cell: u => badge(u.is_active ? 'active' : 'inactive') },
       { title: '', cell: u => u.id === me.id ? '<span class="muted">you</span>' : `<div class="actions">
-          <button class="btn small" data-action="role" data-id="${esc(u.id)}" data-role="${u.role}" data-name="${esc(u.name)}">Change role</button>
+          <button class="btn small" data-action="role" data-id="${esc(u.id)}">Change role</button>
+          ${u.role === 'admin' ? '' : `<button class="btn small" data-action="access" data-id="${esc(u.id)}">Access</button>`}
           <button class="btn small ${u.is_active ? 'danger' : ''}" data-action="toggle-user" data-id="${esc(u.id)}" data-active="${u.is_active}">${u.is_active ? 'Deactivate' : 'Activate'}</button></div>` },
     ], data.items)}`;
+  const picked = el => data.items.find(u => u.id === el.dataset.id);
   actions['add-user'] = async () => {
     if (await formDialog({
       title: 'Add user', submitLabel: 'Add user',
+      note: 'The user starts with the standard access of the role. Use “Access” afterwards to change it for this user.',
       fields: [
         { name: 'name', label: 'Name', required: true, minlength: 2 }, { name: 'email', label: 'Email', type: 'email', required: true },
         { name: 'password', label: 'Initial password', type: 'password', required: true, minlength: 8, hint: 'At least 8 characters. Give it to the user personally.' },
@@ -761,9 +774,29 @@ pages.users = async () => {
     })) route();
   };
   actions.role = async el => {
+    const u = picked(el);
     if (await formDialog({
-      title: `Role of ${el.dataset.name}`, fields: [{ name: 'role', label: 'Role', type: 'select', options: roleOptions, value: el.dataset.role }],
-      submit: values => api(`/users/${el.dataset.id}`, { method: 'PATCH', body: values }),
+      title: `Role of ${u.name}`, fields: [{ name: 'role', label: 'Role', type: 'select', options: roleOptions, value: u.role }],
+      note: u.custom_permissions ? 'This user has custom access. Changing the role replaces it with the standard access of the new role.' : '',
+      submit: values => api(`/users/${u.id}`, { method: 'PATCH', body: values }),
+    })) route();
+  };
+  actions.access = async el => {
+    const u = picked(el);
+    const standard = catalogue.role_defaults[u.role];
+    if (await formDialog({
+      title: `Access of ${u.name}`, submitLabel: 'Save access',
+      note: `Tick what ${u.name} may see and do. “See …” decides whether the section appears in the menu; an action inside a section makes the section visible as well. `
+        + `Ticking exactly the standard of the role (${ROLE_NAMES[u.role]}) keeps the user on that standard.`,
+      fields: groups.map((group, i) => ({
+        name: `group${i}`, label: group, type: 'checks', value: u.permissions,
+        options: catalogue.permissions.filter(p => p.group === group).map(p => [p.key, p.label + (standard.includes(p.key) ? '' : ' (not in the role’s standard)')]),
+      })),
+      submit: values => {
+        const chosen = Object.values(values).flat();
+        const same = chosen.length === standard.length && chosen.every(key => standard.includes(key));
+        return api(`/users/${u.id}`, { method: 'PATCH', body: { permissions: same ? null : chosen } });
+      },
     })) route();
   };
   actions['toggle-user'] = async el => {
@@ -779,8 +812,10 @@ sharedActions['open-doc'] = el => openDocument(el.dataset.id, el.dataset.page);
 
 function currentRoute() {
   const [path, search = ''] = location.hash.replace(/^#\/?/, '').split('?');
-  const [name = 'dashboard', id] = path.split('/');
-  return { entry: NAV.find(n => n[0] === (name || 'dashboard')) || NAV[0], id, search };
+  const [name, id] = path.split('/');
+  // Without an address, or with an unknown one: the first section this user may see
+  const start = NAV.find(n => can(n[2])) || NAV[0];
+  return { entry: NAV.find(n => n[0] === name) || start, id, search };
 }
 
 async function draw() {
@@ -789,7 +824,7 @@ async function draw() {
   const { entry, id, search } = currentRoute();
   actions = { ...sharedActions };
   if (!can(entry[2])) {
-    page().innerHTML = '<div class="empty">Your role does not have access to this page.</div>';
+    page().innerHTML = '<div class="empty">You do not have access to this page. Ask an administrator if you need it.</div>';
     return;
   }
   try {
@@ -829,7 +864,7 @@ function showApp() {
   $('#app').hidden = false;
   $('#org-name').textContent = me.organization_name;
   $('#who-name').textContent = me.name;
-  $('#who-role').textContent = ROLE_NAMES[me.role];
+  $('#who-role').textContent = ROLE_NAMES[me.role] + (me.custom_permissions ? ' · custom' : '');
   $('#who-avatar').textContent = me.name.trim().charAt(0);
   let section = '';
   $('#nav').innerHTML = NAV.filter(n => can(n[2])).map(([key, text, , icon, group]) => {
@@ -837,7 +872,10 @@ function showApp() {
     section = group;
     return `${title}<a href="#/${key}" data-page="${key}" data-tip="${text}">${fa(icon)}<span class="nav-text">${text}</span></a>`;
   }).join('');
-  api('/dashboard', { params: { days: 30 } }).then(navBadges).catch(() => {});
+  if (can('dashboard.view')) api('/dashboard', { params: { days: 30 } }).then(navBadges).catch(() => {});
+  // An address left behind by whoever used this browser before may be a section this user cannot see
+  const first = NAV.find(n => can(n[2]));
+  if (first && !can(currentRoute().entry[2])) location.hash = `#/${first[0]}`;
   route();
 }
 

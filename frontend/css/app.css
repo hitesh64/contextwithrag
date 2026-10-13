@@ -510,6 +510,10 @@ dialog form { display: flex; flex-direction: column; min-height: 0; flex: 1 1 au
 .modal-close:hover { background: var(--bg-tertiary); color: var(--ink); }
 .modal-body { padding: 24px; overflow-y: auto; display: grid; gap: 14px; min-height: 0; }
 .modal-body > .hint { margin: 0; font-size: .82rem; }
+fieldset.checks { border: 1px solid var(--line-soft); border-radius: var(--r-btn); padding: 8px 12px 10px; margin: 0; display: grid; gap: 6px; }
+fieldset.checks legend { padding: 0 6px; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-mute); }
+label.check { display: flex; align-items: center; gap: 8px; font-size: .85rem; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--ink); cursor: pointer; }
+label.check input { width: auto; flex: none; margin: 0; }
 .modal-body .error:empty { display: none; }
 .modal-footer, .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--line); }
 

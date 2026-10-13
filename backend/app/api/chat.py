@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..core.config import settings
 from ..core.database import chat_logs
-from ..core.security import get_current_user, require_role
+from ..core.security import require_permission
 from ..core.utils import RateLimiter, now, paginate
 from ..schemas import ChatIn
 from ..services import answering, audit_service, llm
@@ -20,7 +20,7 @@ def model_unavailable(error: llm.LLMError) -> HTTPException:
 
 
 @router.post("/chat")
-def chat(body: ChatIn, user: dict = Depends(get_current_user)):
+def chat(body: ChatIn, user: dict = Depends(require_permission("chat.ask"))):
     org = user["organization_id"]
     ai_limiter.check(user["id"])
     # Both filters are looked up inside the caller's organization; an id from elsewhere is "not found"
@@ -53,7 +53,7 @@ def chat(body: ChatIn, user: dict = Depends(get_current_user)):
 @router.get("/chat/unanswered")
 def unanswered_questions(
     page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
-    user: dict = Depends(require_role("maintenance_manager")),
+    user: dict = Depends(require_permission("dashboard.unanswered")),
 ):
     """Questions the records could not answer: a to-do list of documents to add."""
     query = {"organization_id": user["organization_id"], "insufficient_evidence": True}

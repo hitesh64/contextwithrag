@@ -2,7 +2,7 @@
 
 A draft is only a record for people to read and edit. Nothing here touches a machine or any
 outside system, and the model takes no part in approving or changing the state of anything:
-transitions are decided by the table below and the role of the person asking.
+transitions are decided by the table below and the permissions of the person asking.
 """
 import json
 import re
@@ -13,23 +13,24 @@ from pydantic import BaseModel, Field, ValidationError
 from . import answering, audit_service, llm
 from ..core.config import settings
 from ..core.database import next_number, work_orders
-from ..core.security import has_role
+from ..core.security import has_permission, permission_label
 from ..core.utils import now
 
 PRIORITIES = ["low", "medium", "high", "critical"]
 MAX_STEPS = 15
 
-# status -> {next status: lowest role that may make the move}
+# status -> {next status: permission needed to make the move}
+_DRAFT, _APPROVE, _EXECUTE = "work_orders.draft", "work_orders.approve", "work_orders.execute"
 TRANSITIONS = {
-    "draft": {"pending_approval": "technician", "cancelled": "technician"},
-    "pending_approval": {"approved": "maintenance_manager", "rejected": "maintenance_manager", "cancelled": "maintenance_manager"},
-    "rejected": {"draft": "technician", "cancelled": "technician"},
-    "approved": {"in_progress": "technician", "cancelled": "maintenance_manager"},
-    "in_progress": {"completed": "technician"},
+    "draft": {"pending_approval": _DRAFT, "cancelled": _DRAFT},
+    "pending_approval": {"approved": _APPROVE, "rejected": _APPROVE, "cancelled": _APPROVE},
+    "rejected": {"draft": _DRAFT, "cancelled": _DRAFT},
+    "approved": {"in_progress": _EXECUTE, "cancelled": _APPROVE},
+    "in_progress": {"completed": _EXECUTE},
     "completed": {},
     "cancelled": {},
 }
-# While a work order is not yet submitted, only its author or a manager may move it
+# While a work order is not yet submitted, only its author or someone who may approve work orders may move it
 _AUTHOR_STATES = ("draft", "rejected")
 
 # A step mentioning any of these is flagged for review by a qualified person
@@ -145,17 +146,17 @@ def generate_draft(user: dict, asset: dict, problem: str) -> dict:
 
 def may_edit(user: dict, order: dict) -> bool:
     return order["status"] in _AUTHOR_STATES and (
-        order["created_by"] == user["id"] or has_role(user, "maintenance_manager")
+        order["created_by"] == user["id"] or has_permission(user, _APPROVE)
     )
 
 
 def allowed_transitions(user: dict, order: dict) -> list[str]:
     """The moves this user may make now, by the same rules transition() enforces."""
     moves = []
-    for to, role in TRANSITIONS[order["status"]].items():
-        if not has_role(user, role):
+    for to, needed in TRANSITIONS[order["status"]].items():
+        if not has_permission(user, needed):
             continue
-        if order["status"] in _AUTHOR_STATES and order["created_by"] != user["id"] and not has_role(user, "maintenance_manager"):
+        if order["status"] in _AUTHOR_STATES and order["created_by"] != user["id"] and not has_permission(user, "work_orders.approve"):
             continue
         if to == "approved" and order["created_by"] == user["id"] and not settings.ALLOW_SELF_APPROVAL:
             continue
@@ -164,7 +165,7 @@ def allowed_transitions(user: dict, order: dict) -> list[str]:
 
 
 def transition(user: dict, order: dict, to: str, comment: str) -> dict:
-    """Move a work order to another status if the table and the user's role allow it; every attempt is audited."""
+    """Move a work order to another status if the table and the user's permissions allow it; every attempt is audited."""
     current = order["status"]
     order_id = str(order["_id"])
 
@@ -175,10 +176,10 @@ def transition(user: dict, order: dict, to: str, comment: str) -> dict:
     needed = TRANSITIONS.get(current, {}).get(to)
     if needed is None:
         refuse(status.HTTP_409_CONFLICT, f"A work order that is '{current}' cannot become '{to}'.")
-    if not has_role(user, needed):
-        refuse(status.HTTP_403_FORBIDDEN, f"Only '{needed}' or higher may do this.")
-    if current in _AUTHOR_STATES and order["created_by"] != user["id"] and not has_role(user, "maintenance_manager"):
-        refuse(status.HTTP_403_FORBIDDEN, "Only the author or a manager may do this.")
+    if not has_permission(user, needed):
+        refuse(status.HTTP_403_FORBIDDEN, f"You do not have the permission '{permission_label(needed)}'.")
+    if current in _AUTHOR_STATES and order["created_by"] != user["id"] and not has_permission(user, "work_orders.approve"):
+        refuse(status.HTTP_403_FORBIDDEN, "Only the author or someone who may approve work orders may do this.")
     if to == "approved" and order["created_by"] == user["id"] and not settings.ALLOW_SELF_APPROVAL:
         refuse(status.HTTP_403_FORBIDDEN, "A work order must be approved by someone other than its author.")
     if to == "rejected" and not comment.strip():
