@@ -1,4 +1,5 @@
 """Google Gemini client: text generation and embeddings. The API key never leaves the server."""
+import logging
 import time
 from functools import lru_cache
 
@@ -6,6 +7,8 @@ from google import genai
 from google.genai import errors, types
 
 from ..core.config import settings
+
+log = logging.getLogger(__name__)
 
 # Texts per embedding request, and the stored vector size
 EMBED_BATCH = 50
@@ -59,10 +62,13 @@ def generate(prompt: str, system: str, json_output: bool = False) -> str:
             return _generate(settings.GEMINI_MODEL, prompt, system, json_output)
         except errors.ClientError as e:
             if e.code == 429 and settings.GEMINI_BACKUP_MODEL not in ("", settings.GEMINI_MODEL):
+                log.warning("Gemini refused %s (429), trying %s: %s", settings.GEMINI_MODEL, settings.GEMINI_BACKUP_MODEL, e.message)
                 return _generate(settings.GEMINI_BACKUP_MODEL, prompt, system, json_output)
             raise
     except errors.APIError as e:
         if e.code == 429:
+            # Google's own text names the limit (per minute, per day, tokens) and when to retry; the user gets less
+            log.warning("Gemini quota refusal (429): %s", e.message)
             raise QuotaError("The request quota of the Gemini API key is used up. Try again later.") from e
         raise LLMError(f"Gemini API error ({e.code}): {e.message}") from e
 

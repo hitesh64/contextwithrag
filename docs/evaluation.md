@@ -111,14 +111,31 @@ current labels when runs are merged.
 
 Nothing about prompt-injection resistance can be claimed yet, and abstention rests on three
 questions. On 13 October only 6 of the 16 open questions were answered: 4 at 08:47 IST and 2 at
-about 11:45 IST, each time before the same limit returned. At 11:07 both models refused with the
-per-day error and at 11:40 both answered again, so the limit does not behave like a counter that is
-emptied once a day. A rolling 24 hours would fit (the requests of 12 October were made between 12:40
-and 15:10 IST and would leave the window one by one), but that is a guess, not something Google's
-error or documentation says. The deployed application had logged no questions at that time, so it
-was not what used the requests. The `source_recall_at_k` of `merged.json` counts only the rows that
+about 11:27 IST. Two more resumes (11:33 and 11:37 IST) answered none.
+
+**Which limit it is, from Google's own error text** (now written to the server log by
+`services/llm.py`; all 10 refusals of the 11:37 run read the same):
+
+```
+Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 17h52m51s.        (at 11:37 IST, i.e. 05:30 IST = 00:00 UTC)
+```
+
+So it is the requests-per-day limit of the project for this model, not a per-minute or token
+limit, and the retry time has pointed at 05:30 IST on three occasions, not at midnight Pacific
+(12:30 IST) as the documentation says. Single requests were still answered while the limit was
+being reported (two one-word test requests at 11:24 and 11:36 IST, and the two benchmark answers
+at 11:27), so the refusal is not strict; that does not show a rolling window, and an earlier note
+here that suggested one was a guess the error text does not support. What used the day's requests
+before 08:47 IST is not known: the benchmark made 4, the deployed application had logged no
+questions, and this machine was off until 08:46. The usage page of the project in AI Studio
+(https://ai.dev/rate-limit) is the place to look; it has not been compared yet.
+
+The `source_recall_at_k` of `merged.json` counts only the rows that
 stored per-source results (4 questions so far); the retrieval figures above are from the
-retrieval-only run of all 26. To finish, repeat this later, without
+retrieval-only run of all 26. Not measured at all with the real model yet: a work-order draft
+generated from evidence (it is not one of the 26 questions; record it separately). To finish, repeat
+this after the reset, one run at a time, without
 changing the answering code in between. It asks only what is still unanswered and merges:
 
 ```bash
