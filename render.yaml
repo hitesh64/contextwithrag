@@ -18,8 +18,6 @@ services:
         sync: false
       - key: MONGO_URI
         sync: false
-      - key: DEMO_PASSWORD
-        sync: false
       # A database of its own: the earlier banking version used "nexus_ai" and its records are not compatible
       - key: MONGO_DB
         value: contextbasedrag

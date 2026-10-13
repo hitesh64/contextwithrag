@@ -45,13 +45,14 @@ The service deploys from `main` automatically. The new application is on `factor
 
 1. In the Render dashboard, set the environment of the service to what `render.yaml` lists
    (an existing service does not pick up new variables from the file by itself): `MONGO_DB`,
-   `FILE_STORE`, `REINDEX_ON_START`, `GEMINI_BACKUP_MODEL`, `DEMO_PASSWORD`, and the new
-   `GOOGLE_API_KEY` and `MONGO_URI`. Change the start command to
+   `FILE_STORE`, `REINDEX_ON_START`, `GEMINI_BACKUP_MODEL`, and the new `GOOGLE_API_KEY` and
+   `MONGO_URI`. (`DEMO_PASSWORD` is not needed on the server: the seeding script reads it on the
+   machine it is run from.) Change the start command to
    `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT` and the health check path to `/health`.
 2. Merge `factory-rebuild` into `main` and push. Render builds and starts it.
 3. Check `https://<address>/health` (`"status": "ok"`), then open `https://<address>/app`.
-4. Optional sample factory, from your own machine, with `DEMO_PASSWORD` set in your `.env` to the
-   same value as on Render:
+4. Optional sample factory, from your own machine; the four demo users get the `DEMO_PASSWORD` of
+   your own `.env`:
 
    ```bash
    .venv\Scripts\python.exe -m backend.scripts.seed_demo https://<address>
