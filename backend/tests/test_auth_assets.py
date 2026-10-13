@@ -152,3 +152,12 @@ def test_assets_are_invisible_across_organizations(client, factory, other_factor
 def test_second_factory_helper_is_independent(client):
     first, second = Factory(client, "gamma"), Factory(client, "delta")
     assert first.organization_id != second.organization_id
+
+
+def test_the_address_itself_opens_the_application(client):
+    home = client.get("/")
+    assert home.status_code == 200 and "Sign in to continue" in home.text and "/static/js/app.js" in home.text
+    # The earlier address still leads there
+    moved = client.get("/app", follow_redirects=False)
+    assert moved.status_code == 307 and moved.headers["location"] == "/"
+    assert client.get("/static/js/app.js").status_code == 200 and client.get("/health").json()["status"] == "ok"

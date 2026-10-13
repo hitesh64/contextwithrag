@@ -2,8 +2,7 @@
 
 **Status, 13 October 2026: deployed.** `https://contextwithrag.onrender.com` runs this application
 since `main` was merged at `33048fd`; the build took about five minutes. Checked from outside,
-without signing in: `/health` answers `ok`, `/app` serves the sign-in page, the landing page links to
-it, the API lists 32 paths including the conflict endpoints, and `/api/v1/documents` and
+without signing in: `/health` answers `ok`, the address serves the sign-in page, the API lists 32 paths including the conflict endpoints, and `/api/v1/documents` and
 `/api/v1/conflicts` refuse a request without a login (401).
 
 **Not checked yet on the deployed service:** registering and signing in, uploading and indexing a
@@ -17,7 +16,7 @@ The storage behaviour itself is covered by tests in `backend/tests/test_deployme
 |---|---|---|
 | Uploaded files stay in `storage/` | The disk is emptied on every restart, and the service restarts whenever it wakes from sleep (after about 15 idle minutes) | `FILE_STORE=database` keeps a copy of every upload in MongoDB (`stored_files`) and puts it back on disk when it is needed |
 | The vector index stays in `chroma_data/` | Lost with the disk | `REINDEX_ON_START=true` indexes every "ready" document again in the background when the server starts |
-| One user | Anyone with the address | Sign-in is required for everything except the landing page and `/health`; anyone can still register a factory of their own |
+| One user | Anyone with the address | Sign-in is required for everything except the sign-in page itself and `/health`; anyone can still register a factory of their own |
 
 Consequences to expect, none of them measured yet:
 
@@ -56,7 +55,7 @@ The service deploys from `main` automatically. The new application is on `factor
    machine it is run from.) Change the start command to
    `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT` and the health check path to `/health`.
 2. Merge `factory-rebuild` into `main` and push. Render builds and starts it.
-3. Check `https://<address>/health` (`"status": "ok"`), then open `https://<address>/app`.
+3. Check `https://<address>/health` (`"status": "ok"`), then open `https://<address>`.
 4. Optional sample factory, from your own machine; the four demo users get the `DEMO_PASSWORD` of
    your own `.env`:
 
