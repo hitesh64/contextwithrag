@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pymongo.errors import PyMongoError
 
@@ -90,11 +90,12 @@ app.mount("/static", StaticFiles(directory=settings.FRONTEND_DIR, check_dir=Fals
 
 
 @app.get("/", include_in_schema=False)
-def index():
-    return FileResponse(settings.FRONTEND_DIR / "index.html", headers={"Cache-Control": "no-cache"})
-
-
-@app.get("/app", include_in_schema=False)
 def application():
     """The application itself: sign-in, assets, documents, chat, breakdowns, work orders."""
     return FileResponse(settings.FRONTEND_DIR / "app.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/app", include_in_schema=False)
+def old_address():
+    """The application used to be here; links and bookmarks to it keep working."""
+    return RedirectResponse("/", status_code=307)

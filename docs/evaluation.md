@@ -185,7 +185,7 @@ Per-question details of this run: `backend/eval/results/2026-10-12_*.json` (not 
 
 ## What the automated tests already establish
 
-These hold regardless of the model, because the backend enforces them (72 tests, all passing):
+These hold regardless of the model, because the backend enforces them (73 tests, all passing):
 
 - A user of one factory cannot read, cite, download, edit or delete another factory's assets,
   documents, breakdowns, work orders or audit events.

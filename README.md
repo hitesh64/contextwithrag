@@ -39,7 +39,7 @@ Fill in `GOOGLE_API_KEY` and `MONGO_URI` in `.env`, then:
 uvicorn backend.app.main:app --port 8000
 ```
 
-- Application: http://localhost:8000/app (the landing page at `/` links to it)
+- Application: http://localhost:8000
 - API reference: http://localhost:8000/docs
 - Health: http://localhost:8000/health
 
@@ -79,7 +79,8 @@ conflicting procedures, no answer, unknown asset, prompt injection, cross-factor
 
 ## Deployment
 
-Prepared for Render's free plan, not deployed yet: `render.yaml` and `docs/deployment.md`. That plan
+A demonstration runs on Render's free plan at https://contextwithrag.onrender.com (see
+`render.yaml` and `docs/deployment.md` for what was and was not checked there). That plan
 empties the disk on every restart, so uploads are also kept in MongoDB (`FILE_STORE=database`) and
 indexed again at start-up (`REINDEX_ON_START=true`).
 
@@ -101,6 +102,6 @@ backend/app/services    ingestion, retrieval, answering, factory context, work o
 backend/tests           automated tests
 backend/eval            labelled questions and the evaluation script
 backend/scripts         sample data generator and demo seeding
-frontend                landing page (index.html) and the application (app.html, js, css)
+frontend                the application (app.html, js, css), served at /
 data/sample             synthetic sample dataset
 ```
