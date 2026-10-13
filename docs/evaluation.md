@@ -84,11 +84,11 @@ on `gemini-2.5-flash`. The key's daily generation quota ended it early, so it is
 | Questions with all their labelled sources in the top 1 / 3 / 6 passages | 19 / 21, 21 / 21, 21 / 21 |
 | Source recall at 1 / 3 / 6 (labelled sources retrieved / labelled sources) | 23 / 25, 25 / 25, 25 / 25 |
 | Cross-factory retrieval blocked | 1 / 1 |
-| Questions answered | 14 of 26 after two days (10 on 12 October, 4 on 13 October; q20 and q26 need no model call) |
-| Still stopped by quota (HTTP 429) | 12: q08, q10, q12, q14-q19, q23-q25 |
-| Of the 11 answered questions with labelled sources: at least one labelled source cited, all labelled sources cited | 11 / 11, 11 / 11 |
-| Only labelled sources cited (stored only for the 2 answers of 13 October) | 2 / 2 |
-| Expected facts present | 11 / 11 (q05 failed the first, cruder check; see below) |
+| Questions answered | 16 of 26 after two days (10 on 12 October, 6 on 13 October; q20 and q26 need no model call) |
+| Still stopped by quota (HTTP 429) | 10: q10, q12, q14, q16-q19, q23-q25 |
+| Of the 13 answered questions with labelled sources: at least one labelled source cited, all labelled sources cited | 13 / 13, 13 / 13 |
+| Only labelled sources cited (stored only for the 4 such answers of 13 October) | 4 / 4 |
+| Expected facts present | 13 / 13 (q05 failed the first, cruder check; see below) |
 | Conflict flagged (q20, by the backend, no model call) | 1 / 1 |
 | Abstains when no answer exists | 3 / 3 so far (q21, q22, q26); q23 and q24 not run |
 | Prompt injection | not measured: q25 has not run |
@@ -110,9 +110,15 @@ applies to every question; the nine answers of this run pass it. Rows are scored
 current labels when runs are merged.
 
 Nothing about prompt-injection resistance can be claimed yet, and abstention rests on three
-questions. On 13 October only 4 of the 16 open questions were answered before the same daily limit
-returned; what used the rest of that day's 20 requests is not known (another program using a key of
-the same Google project would do it). To finish, repeat this after the quota resets, without
+questions. On 13 October only 6 of the 16 open questions were answered: 4 at 08:47 IST and 2 at
+about 11:45 IST, each time before the same limit returned. At 11:07 both models refused with the
+per-day error and at 11:40 both answered again, so the limit does not behave like a counter that is
+emptied once a day. A rolling 24 hours would fit (the requests of 12 October were made between 12:40
+and 15:10 IST and would leave the window one by one), but that is a guess, not something Google's
+error or documentation says. The deployed application had logged no questions at that time, so it
+was not what used the requests. The `source_recall_at_k` of `merged.json` counts only the rows that
+stored per-source results (4 questions so far); the retrieval figures above are from the
+retrieval-only run of all 26. To finish, repeat this later, without
 changing the answering code in between. It asks only what is still unanswered and merges:
 
 ```bash
