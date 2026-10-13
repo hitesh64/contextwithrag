@@ -158,3 +158,26 @@ def test_closing_a_conflict_follows_the_setting_and_the_chosen_access(client, fa
     # Chosen for one technician, it holds whatever the setting says for the roles
     user, _ = person(client, factory, "technician", ["conflicts.resolve"])
     assert user["permissions"] == ["conflicts.view", "conflicts.resolve"]
+
+
+def test_the_administrator_approves_alone_and_can_let_others_do_so(client, factory):
+    asset = factory.asset("CNC-01")
+    assert "work_orders.approve_own" not in role_permissions("maintenance_manager")
+    own = manual_order(client, factory.admin, asset["id"])
+    move(client, factory.admin, own["id"], "pending_approval")
+    assert "approved" in client.get(f"{API}/work-orders/{own['id']}", headers=factory.admin).json()["allowed_transitions"]
+    assert move(client, factory.admin, own["id"], "approved").status_code == 200
+    event = client.get(f"{API}/audit", headers=factory.admin, params={"resource_type": "work_order"}).json()["items"][0]
+    assert event["detail"] == "pending_approval -> approved (approved by its author)"
+
+    # A manager still needs a second person, until the administrator gives this one manager the access
+    manager, headers = person(client, factory, "maintenance_manager")
+    order = manual_order(client, headers, asset["id"])
+    move(client, headers, order["id"], "pending_approval")
+    refused = move(client, headers, order["id"], "approved")
+    assert refused.status_code == 403 and "administrator" in refused.json()["detail"]
+    # Ticked on its own, it brings the approval access it depends on
+    alone = set_access(client, factory, manager["id"], ["work_orders.approve_own"]).json()["permissions"]
+    assert alone == ["work_orders.view", "work_orders.approve", "work_orders.approve_own"]
+    set_access(client, factory, manager["id"], [*role_permissions("maintenance_manager"), "work_orders.approve_own"])
+    assert move(client, headers, order["id"], "approved").status_code == 200

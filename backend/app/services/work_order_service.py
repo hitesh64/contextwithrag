@@ -144,6 +144,13 @@ def generate_draft(user: dict, asset: dict, problem: str) -> dict:
     )
 
 
+def _needs_second_person(user: dict, order: dict) -> bool:
+    """Four-eyes rule: the author may not approve their own work order, unless that has been allowed."""
+    if order["created_by"] != user["id"] or settings.ALLOW_SELF_APPROVAL:
+        return False
+    return not has_permission(user, "work_orders.approve_own")
+
+
 def may_edit(user: dict, order: dict) -> bool:
     return order["status"] in _AUTHOR_STATES and (
         order["created_by"] == user["id"] or has_permission(user, _APPROVE)
@@ -158,7 +165,7 @@ def allowed_transitions(user: dict, order: dict) -> list[str]:
             continue
         if order["status"] in _AUTHOR_STATES and order["created_by"] != user["id"] and not has_permission(user, "work_orders.approve"):
             continue
-        if to == "approved" and order["created_by"] == user["id"] and not settings.ALLOW_SELF_APPROVAL:
+        if to == "approved" and _needs_second_person(user, order):
             continue
         moves.append(to)
     return moves
@@ -180,8 +187,11 @@ def transition(user: dict, order: dict, to: str, comment: str) -> dict:
         refuse(status.HTTP_403_FORBIDDEN, f"You do not have the permission '{permission_label(needed)}'.")
     if current in _AUTHOR_STATES and order["created_by"] != user["id"] and not has_permission(user, "work_orders.approve"):
         refuse(status.HTTP_403_FORBIDDEN, "Only the author or someone who may approve work orders may do this.")
-    if to == "approved" and order["created_by"] == user["id"] and not settings.ALLOW_SELF_APPROVAL:
-        refuse(status.HTTP_403_FORBIDDEN, "A work order must be approved by someone other than its author.")
+    if to == "approved" and _needs_second_person(user, order):
+        refuse(
+            status.HTTP_403_FORBIDDEN,
+            "A work order must be approved by someone other than its author. An administrator can approve it.",
+        )
     if to == "rejected" and not comment.strip():
         refuse(status.HTTP_422_UNPROCESSABLE_CONTENT, "A reason is required to reject a work order.")
     if to == "pending_approval" and not order["title"].strip():
@@ -211,5 +221,6 @@ def transition(user: dict, order: dict, to: str, comment: str) -> dict:
     stored = work_orders.find_one({"_id": order["_id"]})
     if stored["status"] != to:
         refuse(status.HTTP_500_INTERNAL_SERVER_ERROR, "The change could not be verified.")
-    audit_service.record(user, f"work_order.{to}", "work_order", order_id, detail=f"{current} -> {to}")
+    own = " (approved by its author)" if to == "approved" and order["created_by"] == user["id"] else ""
+    audit_service.record(user, f"work_order.{to}", "work_order", order_id, detail=f"{current} -> {to}{own}")
     return stored

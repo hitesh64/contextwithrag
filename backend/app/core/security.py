@@ -112,6 +112,9 @@ PERMISSIONS = {
     "work_orders.view": ("Work orders", "See work orders", "viewer"),
     "work_orders.draft": ("Work orders", "Draft, edit and submit work orders", "technician"),
     "work_orders.approve": ("Work orders", "Approve, reject and cancel work orders", "maintenance_manager"),
+    # The administrator answers for the factory and may approve alone; anyone else needs a second person unless
+    # the administrator gives them this
+    "work_orders.approve_own": ("Work orders", "Approve work orders they wrote themselves", "admin"),
     "work_orders.execute": ("Work orders", "Start and complete approved work orders", "technician"),
     "conflicts.view": ("Conflicts", "See conflicts", "viewer"),
     "conflicts.resolve": ("Conflicts", "Record the decision that closes a conflict", "maintenance_manager"),
@@ -133,6 +136,8 @@ def role_permissions(role: str) -> list[str]:
 def with_implied(keys: list[str]) -> list[str]:
     """The chosen permissions in catalogue order; an action inside a section also makes that section visible."""
     chosen = set(keys)
+    if "work_orders.approve_own" in chosen:
+        chosen.add("work_orders.approve")
     chosen |= {f"{k.split('.')[0]}.view" for k in keys if f"{k.split('.')[0]}.view" in PERMISSIONS}
     return [key for key in PERMISSIONS if key in chosen]
 

@@ -749,7 +749,7 @@ pages.users = async () => {
   page().innerHTML = `
     <div class="page-head"><h1>Users</h1><button class="btn primary" data-action="add-user">Add user</button></div>
     <div class="notice">A role gives a standard set of access. Viewer: read and ask. Technician: also report breakdowns, draft work orders and carry out approved ones.
-      Maintenance manager: also manage assets and documents, import records, approve work orders and close conflicts. Administrator: everything, and manages users.
+      Maintenance manager: also manage assets and documents, import records, approve work orders and close conflicts. Administrator: everything, manages users, and may approve a work order they wrote themselves.
       With <b>Access</b> you choose for one user which sections are visible and what that user may do, for example who may approve work orders.</div>
     ${table([
       { title: 'Name', cell: u => esc(u.name) }, { title: 'Email', cell: u => esc(u.email) },
