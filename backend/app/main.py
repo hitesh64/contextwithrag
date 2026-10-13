@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import threading
 import uuid
@@ -78,7 +79,13 @@ if settings.CORS_ORIGINS:
 
 @app.get("/health", tags=["health"])
 def health():
-    return {"status": "ok", "app": settings.APP_NAME, "llm_configured": bool(settings.GOOGLE_API_KEY)}
+    key = settings.GOOGLE_API_KEY
+    return {
+        "status": "ok", "app": settings.APP_NAME, "llm_configured": bool(key),
+        # Not the key: the start of its hash, to see whether a host was given the same key as another machine.
+        # "configured" only means "not empty"; a key Google rejects still shows up here
+        "llm_key_fingerprint": f"{hashlib.sha256(key.encode()).hexdigest()[:8]}/{len(key)}" if key else None,
+    }
 
 
 api = APIRouter(prefix="/api/v1")

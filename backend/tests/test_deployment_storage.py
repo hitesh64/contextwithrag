@@ -52,3 +52,11 @@ def test_the_copy_in_the_database_stays_inside_its_organization(client, factory,
     shutil.rmtree(settings.STORAGE_DIR, ignore_errors=True)
     assert client.get(f"{API}/documents/{doc['id']}/file", headers=other_factory.admin).status_code == 404
     assert client.get(f"{API}/documents/{doc['id']}/file", headers=factory.admin).content == SOP
+
+
+def test_health_tells_keys_apart_without_showing_them(client):
+    import hashlib
+
+    health = client.get("/health").json()
+    assert health["llm_key_fingerprint"] == hashlib.sha256(b"test-key").hexdigest()[:8] + "/8"
+    assert "test-key" not in str(health)
