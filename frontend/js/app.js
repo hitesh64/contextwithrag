@@ -184,15 +184,40 @@ async function assetOptions() {
   return found.map(a => [a.id, `${a.asset_code} — ${a.name}`]);
 }
 
+/** Hand a file that came through the authenticated API to the browser, to keep under this name. */
+function saveFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
 /** Open an original document through the authenticated API (there is no public file URL). */
 async function openDocument(id, pageNumber) {
   await attempt(async () => {
     const response = await api(`/documents/${id}/file`, { raw: true });
-    const url = URL.createObjectURL(await response.blob());
+    const blob = await response.blob();
+    if (!/pdf|^text\//.test(blob.type)) {
+      // A browser cannot show a spreadsheet or an Office file in a tab: it is saved under its own name instead
+      const name = /filename\*?=(?:UTF-8'')?"?([^";]+)/i.exec(response.headers.get('content-disposition') || '');
+      saveFile(blob, name ? decodeURIComponent(name[1]) : 'document');
+      return;
+    }
+    const url = URL.createObjectURL(blob);
     window.open(url + (pageNumber ? `#page=${pageNumber}` : ''), '_blank', 'noopener');
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   });
 }
+
+/** Download a register as an Excel file, with the filters the list is showing. */
+const exportExcel = (path, params, filename) => attempt(async () => {
+  const response = await api(path, { params, raw: true });
+  saveFile(await response.blob(), filename);
+}, 'Excel file downloaded');
 
 function locator(source) {
   if (source.page) return `page ${source.page}`;
@@ -354,8 +379,9 @@ pages.assets = async (id, query) => {
   const params = { q: query.get('q') || '', status: query.get('status') || '', page: query.get('page') || 1 };
   const data = await api('/assets', { params });
   page().innerHTML = `
-    <div class="page-head"><h1>Asset register</h1>
-      ${can('assets.manage') ? '<button class="btn primary" data-action="add-asset">Add asset</button>' : ''}</div>
+    <div class="page-head"><h1>Asset register</h1><div class="actions">
+      <button class="btn" data-action="export-assets">Export Excel</button>
+      ${can('assets.manage') ? '<button class="btn primary" data-action="add-asset">Add asset</button>' : ''}</div></div>
     <form class="filters" id="filters">
       <label>Search<input name="q" value="${esc(params.q)}" placeholder="Code, name, location…"></label>
       <label>Status<select name="status">${[['', 'In use (not archived)'], ['active', 'Active'], ['under_maintenance', 'Under maintenance'], ['inactive', 'Inactive'], ['archived', 'Archived']].map(([v, t]) => `<option value="${v}" ${v === params.status ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
@@ -372,6 +398,7 @@ pages.assets = async (id, query) => {
     location.hash = '#/assets?' + new URLSearchParams(new FormData(event.target));
   };
   actions['assets-page'] = el => { query.set('page', el.dataset.page); location.hash = '#/assets?' + query; };
+  actions['export-assets'] = () => exportExcel('/assets/export', {}, 'assets.xlsx');
   actions['add-asset'] = async () => {
     const created = await formDialog({
       title: 'Add asset', submitLabel: 'Add asset',
@@ -452,7 +479,7 @@ pages.documents = async (_, query) => {
       { title: '', cell: d => can('documents.manage') ? `<div class="actions">
           ${['failed', 'ready'].includes(d.status) ? `<button class="btn small" data-action="reprocess" data-id="${esc(d.id)}">Reprocess</button>` : ''}
           <button class="btn small danger" data-action="delete-doc" data-id="${esc(d.id)}" data-name="${esc(d.filename)}">Delete</button></div>` : '' },
-    ], data.items, { empty: 'No documents yet. Upload a machine manual or SOP (PDF, DOCX, PPTX, TXT).' })}
+    ], data.items, { empty: 'No documents yet. Upload a machine manual, SOP or parts list (PDF, DOCX, PPTX, XLSX, CSV, TXT).' })}
     ${pager(data, 'docs-page')}`;
   $('#filters').onsubmit = event => { event.preventDefault(); location.hash = '#/documents?' + new URLSearchParams(new FormData(event.target)); };
   actions['docs-page'] = el => { query.set('page', el.dataset.page); location.hash = '#/documents?' + query; };
@@ -461,7 +488,7 @@ pages.documents = async (_, query) => {
       title: 'Upload document', submitLabel: 'Upload',
       note: 'Processing runs in the background; the status column shows when the document is ready to search.',
       fields: [
-        { name: 'file', label: 'File', type: 'file', required: true, accept: '.pdf,.docx,.pptx,.txt,.md', hint: 'PDF, DOCX, PPTX, TXT or MD with selectable text. Scanned pages are not supported yet.' },
+        { name: 'file', label: 'File', type: 'file', required: true, accept: '.pdf,.docx,.pptx,.xlsx,.csv,.txt,.md', hint: 'PDF, DOCX, PPTX, XLSX, CSV, TXT or MD. An Excel sheet needs its column names in the first row. Scanned pages are not supported yet.' },
         { name: 'doc_type', label: 'Document type', type: 'select', options: [['manual', 'Machine manual'], ['sop', 'SOP / procedure'], ['spare_parts', 'Spare-parts list'], ['other', 'Other']], value: 'manual' },
         { name: 'asset_ids', label: 'Applies to assets', type: 'select', multiple: true, options: assets, hint: 'Hold Ctrl to select several. Leave empty for a general document.' },
       ],
@@ -525,6 +552,7 @@ pages.breakdowns = async (_, query) => {
   const data = await api('/breakdowns', { params: { ...params, page: query.get('page') || 1, date_to: params.date_to && params.date_to + 'T23:59:59' } });
   page().innerHTML = `
     <div class="page-head"><h1>Breakdown history</h1><div class="actions">
+      <button class="btn" data-action="export-breakdowns">Export Excel</button>
       ${can('breakdowns.import') ? '<button class="btn" data-action="import">Import CSV / XLSX</button>' : ''}
       ${can('breakdowns.report') ? '<button class="btn primary" data-action="add-breakdown">Report breakdown</button>' : ''}</div></div>
     <form class="filters" id="filters">
@@ -553,6 +581,8 @@ pages.breakdowns = async (_, query) => {
       submit: values => api('/breakdowns', { method: 'POST', body: { ...values, reported_at: new Date(values.reported_at).toISOString() } }),
     })) route();
   };
+  actions['export-breakdowns'] = () => exportExcel(
+    '/breakdowns/export', { ...params, date_to: params.date_to && params.date_to + 'T23:59:59' }, 'breakdowns.xlsx');
   actions.import = async () => {
     let report = null;
     const done = await formDialog({
@@ -609,10 +639,12 @@ pages['work-orders'] = async (id, query) => {
   const data = await api('/work-orders', { params: { status, page: query.get('page') || 1 } });
   const tabs = [['', 'All'], ['draft', 'Drafts'], ['pending_approval', 'Approval queue'], ['approved', 'Approved'], ['in_progress', 'In progress'], ['completed', 'Completed'], ['rejected', 'Rejected']];
   page().innerHTML = `
-    <div class="page-head"><h1>Work orders</h1>
-      ${can('work_orders.draft') ? '<button class="btn primary" data-action="new-wo">Draft work order</button>' : ''}</div>
+    <div class="page-head"><h1>Work orders</h1><div class="actions">
+      <button class="btn" data-action="export-wo">Export Excel</button>
+      ${can('work_orders.draft') ? '<button class="btn primary" data-action="new-wo">Draft work order</button>' : ''}</div></div>
     <div class="tabs">${tabs.map(([v, t]) => `<a class="tab ${v === status ? 'active' : ''}" href="#/work-orders${v ? '?status=' + v : ''}">${t}</a>`).join('')}</div>
     ${workOrderTable(data.items)}${pager(data, 'wo-page')}`;
+  actions['export-wo'] = () => exportExcel('/work-orders/export', { status }, 'work_orders.xlsx');
   actions['wo-page'] = el => { query.set('page', el.dataset.page); location.hash = '#/work-orders?' + query; };
   actions['new-wo'] = () => newWorkOrder();
 };

@@ -12,7 +12,7 @@ from openpyxl import load_workbook
 from ..core.config import settings
 from ..core.database import assets, breakdowns, next_number
 from ..core.security import get_current_user, require_permission
-from ..core.utils import clean, now, oid, paginate
+from ..core.utils import EXPORT_LIMIT, clean, now, oid, paginate, xlsx_download
 from ..schemas import BreakdownCreate, BreakdownUpdate
 from ..services import audit_service
 from .assets import get_asset
@@ -211,7 +211,37 @@ def list_breakdowns(
     page_size: int = Query(50, ge=1, le=200),
     user: dict = Depends(require_permission("breakdowns.view")),
 ):
-    query: dict = {"organization_id": user["organization_id"]}
+    query = _filter(user["organization_id"], asset_id, status_, q, error_code, date_from, date_to)
+    return paginate(breakdowns, query, page, page_size, [("reported_at", -1)])
+
+
+@router.get("/export")
+def export_breakdowns(
+    asset_id: str = "",
+    status_: str = Query("", alias="status"),
+    q: str = Query("", max_length=100),
+    error_code: str = "",
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    user: dict = Depends(require_permission("breakdowns.view")),
+):
+    """The records the list shows with the same filters, as an Excel file."""
+    query = _filter(user["organization_id"], asset_id, status_, q, error_code, date_from, date_to)
+    found = list(breakdowns.find(query).sort("reported_at", -1).limit(EXPORT_LIMIT))
+    audit_service.record(user, "breakdown.export", "breakdown", detail=f"{len(found)} records")
+    return xlsx_download("breakdowns.xlsx", [
+        ("Record", "record_no"), ("Asset", "asset_code"), ("Reported", "reported_at"), ("Symptoms", "symptoms"),
+        ("Error code", "error_code"), ("Downtime (min)", "downtime_minutes"), ("Root cause", "root_cause"),
+        ("Corrective action", "corrective_action"), ("Parts used", "parts_used"), ("Status", "resolution_status"),
+        ("Source record", "source_record_id"),
+    ], found)
+
+
+def _filter(
+    organization_id: str, asset_id: str, status_: str, q: str, error_code: str,
+    date_from: datetime | None, date_to: datetime | None,
+) -> dict:
+    query: dict = {"organization_id": organization_id}
     if asset_id:
         query["asset_id"] = asset_id
     if status_:
@@ -225,7 +255,7 @@ def list_breakdowns(
         query["reported_at"] = {
             **({"$gte": date_from} if date_from else {}), **({"$lte": date_to} if date_to else {}),
         }
-    return paginate(breakdowns, query, page, page_size, [("reported_at", -1)])
+    return query
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

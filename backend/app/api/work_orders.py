@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..core.database import work_orders
 from ..core.security import require_permission
-from ..core.utils import clean, now, oid, paginate
+from ..core.utils import EXPORT_LIMIT, clean, now, oid, paginate, xlsx_download
 from ..schemas import CommentIn, TransitionIn, WorkOrderCreate, WorkOrderGenerate, WorkOrderUpdate
 from ..services import audit_service, llm, work_order_service
 from .assets import get_asset
@@ -41,6 +41,26 @@ def list_work_orders(
     if asset_id:
         query["asset_id"] = asset_id
     return paginate(work_orders, query, page, page_size, [("created_at", -1)])
+
+
+@router.get("/export")
+def export_work_orders(
+    status_: str = Query("", alias="status"), user: dict = Depends(require_permission("work_orders.view"))
+):
+    """Work orders (of one status, if given) as an Excel file, one row each with the steps in one cell."""
+    query: dict = {"organization_id": user["organization_id"]}
+    if status_:
+        query["status"] = status_
+    found = list(work_orders.find(query).sort("created_at", -1).limit(EXPORT_LIMIT))
+    for order in found:
+        order["steps"] = "\n".join(f"{n}. {item['step']}" for n, item in enumerate(order["proposed_checklist"], start=1))
+    audit_service.record(user, "work_order.export", "work_order", detail=f"{len(found)} records")
+    return xlsx_download("work_orders.xlsx", [
+        ("No.", "order_no"), ("Title", "title"), ("Asset", "asset_code"), ("Priority", "priority"), ("Status", "status"),
+        ("Description", "description"), ("Steps", "steps"), ("Created by", "created_by_name"), ("Created", "created_at"),
+        ("Approved by", "approved_by_name"), ("Approved", "approved_at"), ("Work started", "executed_at"),
+        ("Completed", "completed_at"),
+    ], found)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

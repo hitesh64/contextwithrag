@@ -4,8 +4,11 @@ File -> validation -> private storage -> extraction -> cleaning -> chunking -> e
 
 A PDF is read page by page and a presentation slide by slide, so each chunk keeps the page it
 came from. A Word file has no fixed pages, so its chunks keep the heading they stand under.
-Where neither is known the chunk has no location, and none is invented later.
+A spreadsheet is read row by row: every row is written out with its column names, and rows are
+kept together in groups that name their sheet and row numbers.
+Where no location is known the chunk has none, and none is invented later.
 """
+import csv
 import hashlib
 import io
 import logging
@@ -15,9 +18,11 @@ import zipfile
 from pathlib import Path
 
 import pymupdf
+from datetime import date, datetime, time
 from docx import Document as DocxDocument
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from openpyxl import load_workbook
 from pptx import Presentation
 
 from . import llm, retrieval
@@ -30,16 +35,21 @@ log = logging.getLogger(__name__)
 PARSER_VERSION = "1"
 CHUNK_SIZE = 1200
 CHUNK_OVERLAP = 200
+# Rows of a spreadsheet kept in one chunk: below CHUNK_SIZE, so the splitter never cuts a row from its column names
+ROW_GROUP_CHARS = 900
 
 MIME_TYPES = {
     "pdf": "application/pdf",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "csv": "text/csv",
     "txt": "text/plain",
     "md": "text/markdown",
 }
-# The file every Word / PowerPoint archive must contain
-_OFFICE_MARKER = {"docx": "word/document.xml", "pptx": "ppt/presentation.xml"}
+# The file every Word / PowerPoint / Excel archive must contain
+_OFFICE_MARKER = {"docx": "word/document.xml", "pptx": "ppt/presentation.xml", "xlsx": "xl/workbook.xml"}
+TABLE_TYPES = ("xlsx", "csv")
 
 
 class RejectedFile(ValueError):
@@ -153,8 +163,66 @@ def _load_docx(path: Path) -> list[Document]:
     ]
 
 
+def _cell(value) -> str:
+    """A spreadsheet cell as it reads on screen: no time on a plain date, no ".0" on a whole number."""
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d" if value.time() == time(0) else "%Y-%m-%d %H:%M")
+    if isinstance(value, (date, time)):
+        return value.isoformat()
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return re.sub(r"\s+", " ", str(value)).strip()
+
+
+def _sheet_documents(sheet: str | None, table: list[list]) -> list[Document]:
+    """Groups of rows of one sheet. Row 1 holds the column names; every later row is written as "name: value"."""
+    rows = [(number, [_cell(c) for c in row]) for number, row in enumerate(table, start=1)]
+    rows = [(number, cells) for number, cells in rows if any(cells)]
+    if not rows:
+        return []
+    names = [name or f"Column {i}" for i, name in enumerate(rows[0][1], start=1)]
+    lines = [
+        (number, f"Row {number}: " + "; ".join(
+            f"{names[i] if i < len(names) else f'Column {i + 1}'}: {cell}" for i, cell in enumerate(cells) if cell
+        ))
+        for number, cells in rows[1:]
+    ] or [(1, "Row 1: " + "; ".join(c for c in rows[0][1] if c))]  # a sheet with a single row has no column names
+
+    where = f"sheet “{sheet}”, " if sheet else ""
+    groups: list[list[tuple[int, str]]] = [[]]
+    for line in lines:
+        if groups[-1] and sum(len(text) + 1 for _, text in groups[-1]) + len(line[1]) > ROW_GROUP_CHARS:
+            groups.append([])
+        groups[-1].append(line)
+    return [
+        Document(
+            page_content=(f"Sheet: {sheet}\n" if sheet else "") + "\n".join(text for _, text in group),
+            metadata={"section": f"{where}rows {group[0][0]}-{group[-1][0]}" if len(group) > 1 else f"{where}row {group[0][0]}"},
+        )
+        for group in groups
+    ]
+
+
+def _load_table_file(path: Path, ext: str) -> list[Document]:
+    if ext == "csv":
+        return _sheet_documents(None, list(csv.reader(io.StringIO(path.read_text(encoding="utf-8-sig")))))
+    # data_only: the value a formula showed when the file was last saved, not the formula itself
+    workbook = load_workbook(path, read_only=True, data_only=True)
+    try:
+        return [
+            part for sheet in workbook.worksheets
+            for part in _sheet_documents(sheet.title, [list(row) for row in sheet.iter_rows(values_only=True)])
+        ]
+    finally:
+        workbook.close()
+
+
 def extract(path: Path, ext: str) -> list[Document]:
     """The text of a file as Documents whose metadata holds the page or section, where known."""
+    if ext in TABLE_TYPES:
+        return _load_table_file(path, ext)
     if ext == "pdf":
         with pymupdf.open(path) as pdf:
             return [
@@ -211,7 +279,10 @@ def process_document(document_id) -> None:
         except Exception:
             raise ValueError("The file could not be read (corrupt or password-protected).")
         if sum(len(p.page_content) for p in parts) < 10:
-            raise ValueError("No readable text found. Scanned documents need OCR, which is not supported yet.")
+            raise ValueError(
+                "The spreadsheet has no filled rows." if ext in TABLE_TYPES
+                else "No readable text found. Scanned documents need OCR, which is not supported yet."
+            )
         chunks = split(parts)
         if len(chunks) > settings.MAX_FILE_CHUNKS:
             raise ValueError(

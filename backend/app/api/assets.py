@@ -6,7 +6,7 @@ from pymongo.errors import DuplicateKeyError
 
 from ..core.database import assets, breakdowns, documents, work_orders
 from ..core.security import get_current_user, has_permission, require_permission
-from ..core.utils import clean, now, oid, paginate
+from ..core.utils import EXPORT_LIMIT, clean, now, oid, paginate, xlsx_download
 from ..schemas import AssetCreate, AssetUpdate
 from ..services import audit_service, factory_context
 
@@ -42,6 +42,18 @@ def list_assets(
         pattern = {"$regex": re.escape(q), "$options": "i"}
         query["$or"] = [{f: pattern} for f in ("asset_code", "name", "location", "manufacturer", "model")]
     return paginate(assets, query, page, page_size, [("asset_code", 1)])
+
+
+@router.get("/export")
+def export_assets(user: dict = Depends(require_permission("assets.view"))):
+    """The whole asset register, archived machines included, as an Excel file."""
+    found = list(assets.find({"organization_id": user["organization_id"]}).sort("asset_code", 1).limit(EXPORT_LIMIT))
+    audit_service.record(user, "asset.export", "asset", detail=f"{len(found)} records")
+    return xlsx_download("assets.xlsx", [
+        ("Asset code", "asset_code"), ("Name", "name"), ("Type", "asset_type"), ("Manufacturer", "manufacturer"),
+        ("Model", "model"), ("Serial number", "serial_number"), ("Location", "location"),
+        ("Criticality", "criticality"), ("Status", "status"), ("Created", "created_at"),
+    ], found)
 
 
 @router.get("/options")

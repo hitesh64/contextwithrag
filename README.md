@@ -10,12 +10,13 @@ that evidence, and requires a manager's approval before a work order can be carr
 |---|---|
 | Factories and users | Each factory is its own workspace. Roles: viewer, technician, maintenance manager, administrator. A role gives a standard set of access; under Users → Access the administrator can choose for one user which sections are visible and what that user may do (for example who may approve work orders or close conflicts). The backend enforces the same list, so a hidden section is also refused by the API. Managing users stays with the administrator. |
 | Assets | Create, search, edit and archive machines. Asset codes are unique inside a factory. |
-| Documents | Upload PDF, DOCX, PPTX, TXT, MD. Files are validated, stored privately, chunked and indexed in the background. Statuses: queued, processing, ready, failed. Reprocess and delete. |
+| Documents | Upload PDF, DOCX, PPTX, XLSX, CSV, TXT, MD. An Excel or CSV file is read row by row: every row is written out with its column names and cited by sheet and row numbers. Files are validated, stored privately, chunked and indexed in the background. Statuses: queued, processing, ready, failed. Reprocess and delete. |
 | Ask | Hybrid search (vectors + BM25) inside the user's own factory only. Answers cite numbered evidence; names, pages and record numbers in a citation come from stored data, not from the model. No evidence, or no valid citation, gives an explicit "not found" instead of an answer. |
 | Conflicts | When two documents give different values for the same instruction (10 minutes in the press SOP, 5 in the general lockout SOP), the backend reports both and picks neither; the model is not asked. Conflicts are listed on their own page. A maintenance manager or administrator records the decision with a reason; a change to either document reopens it. A document counts as superseded only when a manager records that. |
 | Breakdowns | Manual records and CSV/XLSX import with a per-row error report. Repeat-issue summary computed from the records, with the records that support each figure and the gaps (e.g. root cause not recorded). |
 | Work orders | Drafts written by hand or generated from the asset's SOPs and history. Steps without a source, and steps touching safety, are flagged. `draft → pending_approval → approved → in_progress → completed`, plus rejected and cancelled, enforced by the backend. The author cannot approve their own work order, except an administrator, a user the administrator has given that access, or everyone when `ALLOW_SELF_APPROVAL=true`; such an approval is marked in the audit history. |
-| Audit | Every create, edit, delete, import and transition (including refused ones) is recorded with who, when, what and a request id. |
+| Export | Assets, breakdowns (with the filters of the list) and work orders download as Excel files. |
+| Audit | Every create, edit, delete, import, export and transition (including refused ones) is recorded with who, when, what and a request id. |
 
 ## Not built yet
 

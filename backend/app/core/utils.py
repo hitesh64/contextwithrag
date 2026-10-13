@@ -1,11 +1,18 @@
+import io
 import threading
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Response, status
+from openpyxl import Workbook
+from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
+
+from .config import settings
 
 # Never sent to a browser
 _PRIVATE_FIELDS = ("password_hash", "storage_key")
@@ -38,6 +45,43 @@ def paginate(collection, query: dict, page: int, page_size: int, sort: list) -> 
         "page": page,
         "page_size": page_size,
     }
+
+
+EXPORT_LIMIT = 20_000
+
+
+def xlsx_download(filename: str, columns: list[tuple[str, str]], records) -> Response:
+    """An Excel file of records for download. columns: (heading, field name); at most EXPORT_LIMIT rows."""
+    zone = ZoneInfo(settings.LOCAL_TIMEZONE)
+    book = Workbook()
+    sheet = book.active
+    sheet.append([heading for heading, _ in columns])
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+    for record in records:
+        row = []
+        for _, field in columns:
+            value = record.get(field)
+            if isinstance(value, datetime):
+                # Excel has no time zones: the factory's local time, as everywhere else in the application
+                value = value.astimezone(zone).replace(tzinfo=None, microsecond=0) if value.tzinfo else value
+            elif isinstance(value, (list, dict)):
+                value = ", ".join(str(v) for v in value) if isinstance(value, list) else str(value)
+            row.append(value)
+        sheet.append(row)
+        for cell in sheet[sheet.max_row]:
+            if isinstance(cell.value, str):
+                cell.data_type = "s"  # text typed by a user stays text, even when it starts with "="
+    for index, (heading, _) in enumerate(columns, start=1):
+        sheet.column_dimensions[get_column_letter(index)].width = max(12, min(48, len(heading) + 6))
+    sheet.freeze_panes = "A2"
+    data = io.BytesIO()
+    book.save(data)
+    return Response(
+        data.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 class RateLimiter:
