@@ -1163,6 +1163,8 @@ document.querySelectorAll('[data-auth-tab]').forEach(tab => {
     $('#login-form').hidden = tab.dataset.authTab !== 'login';
     $('#register-form').hidden = tab.dataset.authTab !== 'register';
     $('#auth-error').textContent = '';
+    // The two forms differ in height: start the new one from the top of the card
+    $('#auth').scrollTop = 0;
   };
 });
 
@@ -1302,7 +1304,8 @@ function showSwipe(on) {
   $('#auth-forms').hidden = on;
   $('#swipe-thumb').style.transform = '';
   $('#auth-error').textContent = '';
-  if (!on) $('#auth-forms form:not([hidden]) input').focus();
+  $('#auth').scrollTop = 0;
+  if (!on) $('#auth-forms form:not([hidden]) input').focus({ preventScroll: true });
 }
 {
   const swipe = $('#swipe');

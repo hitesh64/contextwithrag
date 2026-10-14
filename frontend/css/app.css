@@ -543,11 +543,14 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
 .toast.bad i { color: var(--red); }
 
 /* ───────── Login (kept unscaled) ───────── */
+/* The card is centred with margin:auto, not place-items:center: when it is taller than the window
+   a centred grid item overflows above the top and that part can never be scrolled to. */
 .auth {
-  position: fixed; inset: 0; overflow: auto; display: grid; place-items: center; padding: 24px 16px;
+  position: fixed; inset: 0; overflow-x: hidden; overflow-y: auto; display: flex; padding: 24px 16px;
   background: linear-gradient(180deg, #f8fbff 0%, #eef2ff 55%, #f5f3ff 100%);
-  isolation: isolate;
+  isolation: isolate; overscroll-behavior: contain; scrollbar-gutter: stable;
 }
+.auth > .auth-card { margin: auto; flex: none; }
 .login-rings {
   position: fixed; z-index: -1; inset: 0; pointer-events: none;
   background: repeating-radial-gradient(circle at 50% 50%, transparent 0 78px, rgba(99, 102, 241, .17) 78px 79.5px, rgba(165, 180, 252, .09) 79.5px 84px, transparent 84px 118px);
@@ -555,16 +558,18 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
   animation: rings 9s ease-in-out infinite alternate;
 }
 .login-floor {
-  position: absolute; z-index: -1; left: 0; right: 0; bottom: 0; height: 30%; pointer-events: none;
+  position: fixed; z-index: -1; left: 0; right: 0; bottom: 0; height: 30%; pointer-events: none;
   background: radial-gradient(60% 100% at 50% 0%, rgba(255, 255, 255, .95), transparent 70%), linear-gradient(180deg, rgba(224, 231, 255, .0), rgba(224, 231, 255, .75));
   border-top: 1px solid rgba(255, 255, 255, .8);
 }
 .login-rail {
-  position: absolute; left: 22px; top: 50%; writing-mode: vertical-rl; transform: translateY(-50%) rotate(180deg);
+  position: fixed; z-index: -1; left: 22px; top: 50%; writing-mode: vertical-rl; transform: translateY(-50%) rotate(180deg);
   font-size: 10.5px; font-weight: 700; letter-spacing: .34em; text-transform: uppercase; color: rgba(71, 85, 105, .6); white-space: nowrap;
   padding-right: 12px; border-right: 1.5px solid rgba(71, 85, 105, .22);
 }
-.login-tagline { position: absolute; top: 28px; right: 34px; }
+.login-tagline { position: fixed; z-index: -1; top: 28px; right: 34px; }
+/* The rail and tagline sit beside the card; hide them when the window is too short or narrow for that */
+@media (max-height: 640px), (max-width: 1180px) { .login-rail, .login-tagline { display: none; } }
 .auth-card {
   width: 100%; max-width: 420px; text-align: center;
   background: #fff; border: 1px solid var(--border); border-radius: var(--r-modal); padding: 48px 40px; box-shadow: var(--shadow-lg);
