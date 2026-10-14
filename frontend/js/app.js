@@ -257,7 +257,7 @@ const fa = name => `<i class="fa-solid fa-${name}"></i>`;
 
 /** Count pills in the sidebar, from the same figures the dashboard shows. */
 function navBadges(d) {
-  const counts = { 'work-orders': d.work_orders.pending_approval || 0, breakdowns: (d.breakdowns.open || 0) + (d.breakdowns.in_progress || 0) };
+  const counts ={ 'work-orders': d.work_orders.pending_approval || 0, breakdowns: (d.breakdowns.open || 0) + (d.breakdowns.in_progress || 0) };
   for (const [key, count] of Object.entries(counts)) {
     const link = $(`#nav a[data-page="${key}"]`);
     if (!link) continue;
@@ -1256,6 +1256,55 @@ hdr.addEventListener('pointermove', event => {
   const box = hdr.getBoundingClientRect();
   $('#spotlight').style.transform = `translate(${(event.clientX - box.left) / zoom}px, ${(event.clientY - box.top) / zoom}px)`;
 });
+
+// Header photo banner. The gold bar of the current slide is a CSS animation; when it ends the next slide shows,
+// so pausing the animation (pointer over the banner, keyboard in it) also pauses the slideshow.
+const banner = { index: 0, slides: [...document.querySelectorAll('#banner-track .banner-slide')], bars: [...document.querySelectorAll('#banner-bars button')] };
+
+function showSlide(i) {
+  const n = banner.slides.length;
+  banner.index = (i + n) % n;
+  banner.slides.forEach((slide, k) => {
+    slide.classList.toggle('on', k === banner.index);
+    slide.setAttribute('aria-hidden', String(k !== banner.index));
+  });
+  banner.bars.forEach((bar, k) => { bar.classList.remove('on'); bar.classList.toggle('done', k < banner.index); });
+  void banner.bars[banner.index].offsetWidth; // restart the fill animation
+  banner.bars[banner.index].classList.add('on');
+  $('#banner-count').textContent = `${String(banner.index + 1).padStart(2, '0')} / ${String(n).padStart(2, '0')}`;
+}
+
+{
+  const box = $('#hdr-banner');
+  $('#banner-bars').addEventListener('animationend', event => { if (event.animationName === 'bar-fill') showSlide(banner.index + 1); });
+  banner.bars.forEach((bar, k) => { bar.onclick = () => showSlide(k); });
+  $('#banner-prev').onclick = () => showSlide(banner.index - 1);
+  $('#banner-next').onclick = () => showSlide(banner.index + 1);
+  // A clicked button keeps focus: only keyboard focus (focus-visible) holds the slideshow
+  const pause = () => box.classList.toggle('paused', box.matches(':hover') || Boolean(box.querySelector(':focus-visible')));
+  for (const type of ['mouseenter', 'mouseleave', 'focusin', 'focusout']) box.addEventListener(type, () => setTimeout(pause));
+  box.addEventListener('keydown', event => {
+    if (event.key === 'ArrowRight') showSlide(banner.index + 1);
+    if (event.key === 'ArrowLeft') showSlide(banner.index - 1);
+  });
+  showSlide(0);
+}
+
+// Shift clock: three 8-hour shifts, A 06:00, B 14:00, C 22:00
+const SHIFTS = [['A', 'Morning', 6], ['B', 'Evening', 14], ['C', 'Night', 22]];
+function tickShift() {
+  const now = new Date();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const [letter, name, startHour] = SHIFTS[minutes >= 22 * 60 || minutes < 6 * 60 ? 2 : minutes >= 14 * 60 ? 1 : 0];
+  const elapsed = (minutes - startHour * 60 + 1440) % 1440;
+  const left = 480 - elapsed;
+  $('#shift-name').textContent = `Shift ${letter} · ${name}`;
+  $('#shift-time').textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  $('#shift-fill').style.width = `${(elapsed / 480) * 100}%`;
+  $('#shift-left').textContent = `${Math.floor(left / 60)}h ${left % 60}m left in shift`;
+}
+tickShift();
+setInterval(tickShift, 15000);
 
 document.addEventListener('keydown', event => {
   if (!(event.ctrlKey || event.metaKey)) {

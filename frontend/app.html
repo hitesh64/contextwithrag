@@ -81,12 +81,8 @@
   <div id="app" class="app" hidden>
     <header class="hdr" id="hdr">
       <div class="hdr-deco" aria-hidden="true">
-        <span class="orb orb-1"></span><span class="orb orb-2"></span>
-        <svg class="circuit" viewBox="0 0 520 100" preserveAspectRatio="xMaxYMid slice">
-          <path d="M0 62h70l18-30h60l16 28h84l18-32h72l14 24h168"/>
-          <path d="M40 88h96l14-22h110l16 26h120l12-18h112"/>
-          <path d="M210 8l14 8v16l-14 8-14-8V16zM372 44l12 7v14l-12 7-12-7V51z"/>
-        </svg>
+        <span class="aurora aurora-1"></span><span class="aurora aurora-2"></span><span class="aurora aurora-3"></span>
+        <span class="hdr-grid"></span>
         <span class="spotlight" id="spotlight"></span>
       </div>
 
@@ -99,15 +95,36 @@
         <span class="hdr-sub">Factory maintenance intelligence</span>
       </a>
 
-      <!-- Slideshow slot: no photos in this project yet, so three gradient placeholders -->
-      <div class="hdr-show" aria-hidden="true">
-        <div class="slides">
-          <div class="slide slide-1"><i class="fa-solid fa-industry"></i></div>
-          <div class="slide slide-2"><i class="fa-solid fa-book-open"></i></div>
-          <div class="slide slide-3"><i class="fa-solid fa-screwdriver-wrench"></i></div>
+      <!-- Photo banner (Pexels photos, free licence; see frontend/img/banner/CREDITS.txt). Rotation: app.js -->
+      <section class="hdr-banner" id="hdr-banner" aria-roledescription="carousel" aria-label="ContextBasedRAG">
+        <div class="banner-track" id="banner-track">
+          <figure class="banner-slide on" aria-roledescription="slide" aria-label="1 of 4">
+            <img src="/static/img/banner/slide-1.jpg" alt="Rows of production machines on a factory floor">
+            <figcaption><span class="slide-kicker">Plant floor</span><span class="slide-title">Every machine. Every manual. One answer.</span></figcaption>
+          </figure>
+          <figure class="banner-slide" aria-roledescription="slide" aria-label="2 of 4">
+            <img src="/static/img/banner/slide-2.jpg" alt="A CNC tool machining a steel part" loading="lazy">
+            <figcaption><span class="slide-kicker">Precision</span><span class="slide-title">Maintenance backed by your own records.</span></figcaption>
+          </figure>
+          <figure class="banner-slide" aria-roledescription="slide" aria-label="3 of 4">
+            <img src="/static/img/banner/slide-3.jpg" alt="Copper lines and steel parts of an industrial machine" loading="lazy">
+            <figcaption><span class="slide-kicker">Reliability</span><span class="slide-title">Know the fix before the breakdown spreads.</span></figcaption>
+          </figure>
+          <figure class="banner-slide" aria-roledescription="slide" aria-label="4 of 4">
+            <img src="/static/img/banner/slide-4.jpg" alt="A technician at the control panel of a machine" loading="lazy">
+            <figcaption><span class="slide-kicker">People</span><span class="slide-title">Your team's know-how, kept and searchable.</span></figcaption>
+          </figure>
         </div>
-        <div class="dots"><span></span><span></span><span></span></div>
-      </div>
+        <div class="banner-foot">
+          <span class="banner-count" id="banner-count">01 / 04</span>
+          <div class="banner-bars" id="banner-bars">
+            <button type="button" aria-label="Show slide 1"></button><button type="button" aria-label="Show slide 2"></button>
+            <button type="button" aria-label="Show slide 3"></button><button type="button" aria-label="Show slide 4"></button>
+          </div>
+        </div>
+        <button class="banner-nav prev" id="banner-prev" type="button" aria-label="Previous slide"><i class="fa-solid fa-chevron-left"></i></button>
+        <button class="banner-nav next" id="banner-next" type="button" aria-label="Next slide"><i class="fa-solid fa-chevron-right"></i></button>
+      </section>
 
       <div class="hdr-controls">
         <form class="hdr-field hdr-search" id="hdr-search" role="search">
@@ -123,7 +140,13 @@
         </a>
       </div>
 
-      <div class="tagline hdr-tagline" aria-hidden="true"><span>Answers</span><span>from your</span><span>own records</span></div>
+      <!-- Shift clock: the plant's three shifts, the time left in the current one -->
+      <div class="hdr-shift" id="hdr-shift" title="Shift A 06:00–14:00 · Shift B 14:00–22:00 · Shift C 22:00–06:00">
+        <div class="shift-top"><span class="shift-live" aria-hidden="true"></span><span id="shift-name">Shift</span></div>
+        <div class="shift-time" id="shift-time">--:--</div>
+        <div class="shift-meter" aria-hidden="true"><span id="shift-fill"></span></div>
+        <div class="shift-left" id="shift-left"></div>
+      </div>
     </header>
     <div class="drl drl-h" aria-hidden="true"></div>
 
