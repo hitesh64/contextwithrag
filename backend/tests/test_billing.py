@@ -202,6 +202,48 @@ def test_another_companys_reference_is_rejected(client, screenshot):
     assert payment["status"] == "needs_review" and payment["checks_passed"] is True
 
 
+def test_registering_again_continues_an_unpaid_registration(client):
+    """Same email and password before paying: the same company, not a second one."""
+    register(client, "acme")
+    again = client.post(f"{API}/auth/register", json={
+        "organization_name": "Acme Industries", "name": "acme owner", "email": "admin@acme.example.com", "password": PASSWORD,
+    })
+    assert again.status_code == 200, again.text
+    assert again.json()["organization_name"] == "Acme Industries"
+    assert database.organizations.count_documents({"name": {"$in": ["acme", "Acme Industries"]}}) == 1
+
+    wrong = client.post(f"{API}/auth/register", json={
+        "organization_name": "takeover", "name": "someone", "email": "admin@acme.example.com", "password": "another-password-1",
+    })
+    assert wrong.status_code == 409 and "same password" in wrong.json()["detail"]
+    assert database.organizations.find_one({"name": "takeover"}) is None
+
+
+def test_active_company_email_cannot_register_again(client):
+    factory = Factory(client, "active")
+    again = client.post(f"{API}/auth/register", json={
+        "organization_name": "active", "name": "someone", "email": "admin@active.example.com", "password": PASSWORD,
+    })
+    assert again.status_code == 409 and "Sign in instead" in again.json()["detail"]
+    assert factory
+
+
+def test_utr_waiting_for_another_company_goes_to_the_owner(client, screenshot):
+    """Mostly the same person registered twice: the owner decides, and only one payment can be accepted."""
+    first = register(client, "acme")
+    screenshot.read = good_read("123456789012")
+    first_payment = prove(client, first, "123456789012").json()["payment"]
+    second = register(client, "acme-again")
+    second_payment = prove(client, second, "123456789012").json()["payment"]
+    assert second_payment["status"] == "needs_review" and second_payment["checks_passed"] is False
+    assert [c["ok"] for c in second_payment["checks"][:2]] == [None, None]
+    assert "also sent for acme" in second_payment["checks"][0]["detail"]
+
+    owner = owner_headers(client)
+    assert accept(client, owner, first_payment)["status"] == "accepted"
+    assert accept(client, owner, second_payment)["status"] == "rejected"
+
+
 def test_reused_utr_or_screenshot_is_rejected_without_a_model_call(client, screenshot):
     first = register(client, "acme")
     screenshot.read = good_read("123456789012")

@@ -113,7 +113,7 @@ def submit_proof(utr: str = Form(...), screenshot: UploadFile = File(...), user:
 
     checks = payment_check.database_checks(org_id, utr, image_hash)
     read = None
-    if all(c["ok"] for c in checks):  # a reused UTR or screenshot is refused without spending a model call
+    if not any(c["ok"] is False for c in checks):  # a spent UTR or screenshot is refused without a model call
         try:
             read = payment_check.read_screenshot(data, kind)
             checks += payment_check.screenshot_checks(read, utr, org["created_at"], org_id)

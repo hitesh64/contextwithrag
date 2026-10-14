@@ -1,5 +1,5 @@
 """Sign-up of a factory, login, and the administrator's user management."""
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pymongo.errors import DuplicateKeyError
 
 from ..core.config import settings
@@ -70,11 +70,24 @@ def _new_user(
 
 
 @router.post("/auth/register", status_code=status.HTTP_201_CREATED)
-def register(body: RegisterIn, request: Request):
-    """Create a new factory workspace; the person signing up becomes its administrator."""
+def register(body: RegisterIn, request: Request, response: Response):
+    """Create a new factory workspace; the person signing up becomes its administrator.
+
+    Registering again with the email and password of a company that has not paid yet continues that registration,
+    so an unfinished sign-up never forces a second company (whose UTR would then clash with the first)."""
     login_limiter.check(f"register:{request.client.host if request.client else ''}")
-    if users.find_one({"email": body.email.lower()}):
-        raise HTTPException(status.HTTP_409_CONFLICT, "This email is already registered.")
+    existing = users.find_one({"email": body.email.lower()})
+    if existing:
+        org = organizations.find_one({"_id": oid(existing["organization_id"])}, {"status": 1})
+        if not (org and org.get("status") == "pending_payment" and existing["role"] == "admin"):
+            raise HTTPException(status.HTTP_409_CONFLICT, "This email is already registered. Sign in instead.")
+        if not verify_password(body.password, existing["password_hash"]):
+            raise HTTPException(status.HTTP_409_CONFLICT,
+                                "This email has a registration waiting for payment. Enter the same password to continue it.")
+        organizations.update_one({"_id": org["_id"]}, {"$set": {"name": body.organization_name}})
+        users.update_one({"_id": existing["_id"]}, {"$set": {"name": body.name}})
+        response.status_code = status.HTTP_200_OK
+        return _user_out(users.find_one({"_id": existing["_id"]}))
     # Active only after the registration fee is paid; the platform owner's own company never pays
     paid = settings.REGISTRATION_FEE <= 0 or body.email.lower() == settings.PLATFORM_OWNER_EMAIL
     if not paid and not settings.UPI_ID:

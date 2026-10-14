@@ -78,16 +78,25 @@ def check(key: str, label: str, ok: bool | None, detail: str = "") -> dict:
     return {"key": key, "label": label, "ok": ok, "detail": detail}
 
 
+def _reuse_check(key: str, label: str, what: str, organization_id: str, field: str, value: str) -> dict:
+    """Failed if another company's payment with this value was accepted: that money is spent.
+
+    Only sent for another company, not accepted: undecided, for the owner. It is mostly the same person who
+    registered twice; the bank account shows which company the money was for, and only one can be accepted."""
+    elsewhere = {"organization_id": {"$ne": organization_id}, field: value}
+    if payments.find_one({**elsewhere, "status": "accepted"}) or (field == "utr" and payments.find_one({"accepted_utr": value})):
+        return check(key, label, False, f"This {what} was already accepted for another company.")
+    other = payments.find_one(elsewhere, {"organization_name": 1}, sort=[("created_at", -1)])
+    if other:
+        return check(key, label, None, f"This {what} was also sent for {other.get('organization_name') or 'another company'}.")
+    return check(key, label, True)
+
+
 def database_checks(organization_id: str, utr: str, image_hash: str) -> list[dict]:
-    """Refuse a UTR or screenshot that another company has already used. No model call."""
-    elsewhere = {"organization_id": {"$ne": organization_id}, "status": {"$in": ["accepted", "needs_review"]}}
-    utr_used = payments.find_one({**elsewhere, "utr": utr}) is not None or payments.find_one({"accepted_utr": utr}) is not None
-    shot_used = payments.find_one({"organization_id": {"$ne": organization_id}, "screenshot_hash": image_hash}) is not None
+    """A UTR or screenshot already accepted for another company is refused. No model call."""
     return [
-        check("utr_unused", "UTR not used before", not utr_used,
-               "This UTR was already submitted for another company." if utr_used else ""),
-        check("screenshot_unused", "Screenshot not used before", not shot_used,
-               "This exact screenshot was already submitted for another company." if shot_used else ""),
+        _reuse_check("utr_unused", "UTR not used before", "UTR", organization_id, "utr", utr),
+        _reuse_check("screenshot_unused", "Screenshot not used before", "screenshot", organization_id, "screenshot_hash", image_hash),
     ]
 
 
