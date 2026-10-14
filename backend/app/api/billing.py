@@ -116,7 +116,7 @@ def submit_proof(utr: str = Form(...), screenshot: UploadFile = File(...), user:
     if all(c["ok"] for c in checks):  # a reused UTR or screenshot is refused without spending a model call
         try:
             read = payment_check.read_screenshot(data, kind)
-            checks += payment_check.screenshot_checks(read, utr, org["created_at"])
+            checks += payment_check.screenshot_checks(read, utr, org["created_at"], org_id)
         except llm.LLMError as e:
             checks.append(payment_check.check("ai", "AI check of the screenshot", None, str(e)))
     verdict = payment_check.verdict(checks)

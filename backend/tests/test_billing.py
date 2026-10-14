@@ -172,6 +172,36 @@ def test_payment_dated_before_registration_is_rejected(client, screenshot):
     assert body["payment"]["status"] == "rejected"
 
 
+def test_payment_timed_later_than_now_is_rejected(client, screenshot):
+    """A screenshot showing a time that has not come yet cannot be a real payment."""
+    headers = register(client, "acme")
+    later = now() + timedelta(hours=1)
+    screenshot.read = {**good_read("123456789012"), "paid_on": later.date().isoformat(), "paid_at": f"{later:%H:%M}"}
+    payment = prove(client, headers, "123456789012").json()["payment"]
+    assert payment["status"] == "rejected"
+    assert [c["key"] for c in payment["checks"] if c["ok"] is False] == ["date"]
+
+
+def test_payment_with_a_minute_of_clock_drift_passes(client, screenshot):
+    headers = register(client, "acme")
+    screenshot.read = {**good_read("123456789012"), "paid_at": f"{now() + timedelta(minutes=1):%H:%M}"}
+    payment = prove(client, headers, "123456789012").json()["payment"]
+    assert payment["status"] == "needs_review" and payment["checks_passed"] is True
+
+
+def test_another_companys_reference_is_rejected(client, screenshot):
+    headers = register(client, "acme")
+    reference = client.get(f"{API}/billing", headers=headers).json()["reference"]
+    screenshot.read = {**good_read("123456789012"), "references": ["CBR000000"]}
+    payment = prove(client, headers, "123456789012").json()["payment"]
+    assert payment["status"] == "rejected"
+    assert [c["key"] for c in payment["checks"] if c["ok"] is False] == ["reference"]
+
+    screenshot.read = {**good_read("222222222222"), "note": f"ContextBasedRAG {reference}"}
+    payment = prove(client, headers, "222222222222", PNG + b"2").json()["payment"]
+    assert payment["status"] == "needs_review" and payment["checks_passed"] is True
+
+
 def test_reused_utr_or_screenshot_is_rejected_without_a_model_call(client, screenshot):
     first = register(client, "acme")
     screenshot.read = good_read("123456789012")

@@ -16,7 +16,7 @@ check; only the receiving bank account shows the truth.
 import hashlib
 import json
 import re
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -28,6 +28,9 @@ from ..core.database import payments
 from . import llm
 
 UTR_PATTERN = re.compile(r"^\d{12}$")
+REFERENCE_PATTERN = re.compile(r"CBR[0-9A-F]{6}", re.IGNORECASE)
+# A phone clock can be a little ahead of this server's; a payment later than this is in the future
+CLOCK_SLACK = timedelta(minutes=10)
 
 SYSTEM = """You read one screenshot of a UPI payment (Google Pay, PhonePe, Paytm, BHIM or a bank app).
 Report only what is visible in the picture; never guess or fill in a value that is not shown.
@@ -39,7 +42,9 @@ Answer with one JSON object with exactly these keys:
 - "payee_upi_id": the UPI ID the money was sent to, or null if not shown
 - "payee_name": the name of who received the money, or null
 - "paid_on": the payment date as YYYY-MM-DD, or null
+- "paid_at": the payment time as HH:MM in 24-hour form (3:27 PM is "15:27"), or null
 - "note": the payment note / message, or null
+- "references": every other reference code or ID shown (not the UTR), exactly as written; [] if none
 - "signs_of_editing": a list of short descriptions of visible signs that the picture was edited (digits in a
   different font or size, misaligned or overwritten text, inconsistent spacing or colours); [] if none.
   Only what the pixels show: never whether a date, amount or name seems plausible, which is checked elsewhere.
@@ -93,6 +98,13 @@ def _parse_date(value) -> date | None:
         return None
 
 
+def _parse_time(value) -> time | None:
+    try:
+        return time.fromisoformat(str(value).strip()[:5])
+    except (TypeError, ValueError):
+        return None
+
+
 def _amount(value) -> float | None:
     try:
         return float(str(value).replace(",", "").replace("₹", "").strip())
@@ -100,7 +112,7 @@ def _amount(value) -> float | None:
         return None
 
 
-def screenshot_checks(read: dict, utr: str, registered_at: datetime) -> list[dict]:
+def screenshot_checks(read: dict, utr: str, registered_at: datetime, organization_id: str) -> list[dict]:
     """Compare what the model read in the screenshot with what this payment must be."""
     checks = []
     receipt = read.get("is_upi_payment_screenshot") is True
@@ -137,21 +149,32 @@ def screenshot_checks(read: dict, utr: str, registered_at: datetime) -> list[dic
     checks.append(check("payee", "Paid to the right UPI ID", payee_ok, "" if payee_ok else detail))
 
     paid_on = _parse_date(read.get("paid_on"))
+    paid_at = _parse_time(read.get("paid_at"))
     zone = ZoneInfo(settings.LOCAL_TIMEZONE)
     registered_day = registered_at.astimezone(zone).date()
-    today = datetime.now(zone).date()
+    current = datetime.now(zone)
     if paid_on is None:
         date_ok, detail = None, "No payment date readable."
     elif paid_on < registered_day:
         date_ok, detail = False, f"Paid on {paid_on}, before this company registered ({registered_day})."
-    elif paid_on > today:
+    elif paid_on > current.date():
         date_ok, detail = False, f"The date {paid_on} is in the future."
+    elif paid_at and datetime.combine(paid_on, paid_at, zone) > current + CLOCK_SLACK:
+        date_ok, detail = False, f"The time {paid_at:%H:%M} is later than now ({current:%H:%M}): the payment cannot have happened yet."
     else:
         date_ok, detail = True, ""
     checks.append(check("date", "Paid after registering", date_ok, detail))
 
+    # The QR code puts this company's reference in the payment note; another company's reference is a reused proof
+    expected = reference(organization_id)
+    shown = {code.upper() for text in [read.get("note"), *(read.get("references") or [])]
+             for code in REFERENCE_PATTERN.findall(str(text or ""))}
+    if shown:
+        checks.append(check("reference", f"Reference is {expected}", expected in shown,
+                            "" if expected in shown else f"The screenshot shows {', '.join(sorted(shown))}."))
+
     signs = [str(s) for s in (read.get("signs_of_editing") or []) if str(s).strip()]
-    checks.append(check("not_edited", "No signs of editing", None if signs else True, "; ".join(signs)[:300]))
+    checks.append(check("not_edited", "No signs of editing", None if signs else True, " ".join(signs[:4])[:600]))
     return checks
 
 
