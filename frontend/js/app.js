@@ -10,7 +10,7 @@ const STATUS_STYLE = {
   queued: 'info', processing: 'info', in_progress: 'info', draft: 'info',
   pending_approval: 'warn', open: 'warn', under_maintenance: 'warn', high: 'warn', denied: 'warn',
   failed: 'bad', rejected: 'bad', critical: 'bad', conflict: 'bad', needs_review: 'warn', cancelled: '', archived: '', inactive: '',
-  accepted: 'ok', pending_payment: 'warn',
+  accepted: 'ok', pending_payment: 'warn', paid: 'ok', unpaid: 'warn',
 };
 const MOVE_LABEL = {
   pending_approval: 'Submit for approval', approved: 'Approve', rejected: 'Reject', draft: 'Back to draft',
@@ -21,7 +21,6 @@ let token = sessionStorage.getItem('token');
 let me = null;
 let chart = null;
 let pollTimer = null;
-let payTimer = null;
 const chatLog = [];
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -934,7 +933,6 @@ window.addEventListener('hashchange', () => { if (me) route(); });
 // ---------- registration payment and company logo ----------
 
 const rupees = amount => `₹${Number(amount).toLocaleString('en-IN')}`;
-const CHECK_MARK = { true: ['ok', 'circle-check'], false: ['bad', 'circle-xmark'], null: ['warn', 'circle-question'] };
 
 /** The company logo, or the first letter of its name when it has none. */
 function orgMark(className) {
@@ -959,23 +957,21 @@ function showLogos() {
   setImage($('#pay-logo'), url);
 }
 
-function checkList(checks) {
-  return `<ul class="checks-list">${checks.map(c => {
-    const [tone, icon] = CHECK_MARK[c.ok];
-    return `<li class="${tone}">${fa(icon)}<span><b>${esc(c.label)}</b>${c.detail ? `<span class="muted"> · ${esc(c.detail)}</span>` : ''}</span></li>`;
-  }).join('')}</ul>`;
-}
-
-const PAYMENT_TEXT = {
-  accepted: 'Payment accepted. Your company is active.',
-  rejected: 'This proof was not accepted. Check the reasons, then send the correct UTR and screenshot.',
-  needs_review: 'The AI check could not confirm everything. The platform owner will check the UTR in the bank account; you will get an email.',
-  passed: 'All checks passed. The platform owner now confirms the payment in the bank account; you will get an email when your company is active.',
-};
-const paymentText = p => PAYMENT_TEXT[p.status === 'needs_review' && p.checks_passed ? 'passed' : p.status] || '';
+// Razorpay Checkout, loaded only when someone pays
+let checkoutScript = null;
+const loadCheckout = () => checkoutScript ||= new Promise((resolve, reject) => {
+  const script = document.createElement('script');
+  script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+  script.onload = resolve;
+  script.onerror = () => {
+    checkoutScript = null;
+    script.remove();
+    reject(new Error('Razorpay could not be loaded. Check the internet connection and try again.'));
+  };
+  document.head.append(script);
+});
 
 async function showPayment() {
-  clearTimeout(payTimer);
   $('#auth').hidden = true;
   $('#app').hidden = true;
   $('#pay').hidden = false;
@@ -984,8 +980,13 @@ async function showPayment() {
   await drawPayment();
 }
 
-async function drawPayment(latest) {
-  clearTimeout(payTimer);
+async function enterApp(message) {
+  me = await api('/auth/me');
+  toast(message);
+  showApp();
+}
+
+async function drawPayment() {
   if (!me) return;
   const body = $('#pay-body');
   let b;
@@ -996,60 +997,55 @@ async function drawPayment(latest) {
     $('#pay-retry').onclick = () => drawPayment();
     return;
   }
-  if (b.status === 'active') {
-    me = await api('/auth/me');
-    toast('Payment accepted. Your company is registered.');
-    showApp();
-    return;
-  }
-  const last = latest || b.payments[0];
-  const waiting = b.payments[0]?.status === 'needs_review';
+  if (b.status === 'active') return enterApp('Payment received. Your company is registered.');
+  const failed = b.payments[0]?.error;
   body.innerHTML = `
     <h1>Pay ${rupees(b.fee)} to activate your company</h1>
-    <p class="muted">Scan with any UPI app: Google Pay, PhonePe, Paytm or BHIM. The amount is filled in for you.</p>
-    ${b.configured ? `
-      <div class="qr" role="img" aria-label="UPI QR code for ${esc(rupees(b.fee))}">${b.qr_svg}</div>
-      <div class="pay-facts">
-        <div><span>Amount</span><b>${rupees(b.fee)}</b></div>
-        <div><span>UPI ID</span><b>${esc(b.upi_id)}</b></div>
-        <div><span>Reference</span><b>${esc(b.reference)}</b></div>
-      </div>
-      <a class="btn small upi-app" href="${esc(b.upi_uri)}">${fa('mobile-screen-button')}Open UPI app (on a phone)</a>`
-      : '<div class="notice">Payments are not set up on this server yet. Contact the platform owner.</div>'}
-    ${last ? `<div class="pay-result">
-      <div class="pay-result-head">${badge(last.status)}<span class="muted">UTR ${esc(last.utr)} · ${when(last.created_at)}</span></div>
-      <p>${esc(paymentText(last))}</p>${checkList(last.checks)}</div>` : ''}
-    ${waiting ? `<p class="hint live">${fa('rotate')}Waiting for the platform owner. This page checks again by itself every 15 seconds.</p>`
-      : b.configured ? `<form id="proof-form" class="proof-form">
-      <h2>After paying, verify your payment</h2>
-      <label>UTR / UPI transaction ID <input name="utr" required inputmode="numeric" pattern="[0-9 ]{12,15}" maxlength="15" placeholder="12-digit number from your UPI app" autocomplete="off"></label>
-      <label>Payment screenshot <input name="screenshot" type="file" accept="image/png,image/jpeg,image/webp" required>
-        <span class="hint">The success screen of the payment, showing amount, UTR, receiver and date. Up to 2 MB.</span></label>
-      <button class="btn primary" type="submit">${fa('shield-halved')}Verify payment</button>
-    </form>` : ''}`;
-  if (waiting) payTimer = setTimeout(() => drawPayment(), 15000);
-  const form = $('#proof-form');
-  if (!form) return;
-  form.onsubmit = async event => {
-    event.preventDefault();
-    const button = $('button[type=submit]', form);
-    button.disabled = true;
-    button.innerHTML = `${fa('spinner fa-spin')}AI is checking your payment…`;
-    try {
-      const result = await api('/billing/proof', { method: 'POST', form: new FormData(form) });
-      if (result.organization_status === 'active') {
-        me = await api('/auth/me');
-        toast('Payment verified. Your company is registered; a confirmation email is on its way.');
-        showApp();
-        return;
-      }
-      await drawPayment(result.payment);
-    } catch (error) {
-      toast(error.message, true);
-      button.disabled = false;
-      button.innerHTML = `${fa('shield-halved')}Verify payment`;
-    }
-  };
+    <p class="muted">Card, UPI, net banking or wallet, through Razorpay. Your company is active as soon as the payment goes through.</p>
+    ${b.test_mode ? `<div class="notice warn">${fa('flask')}<b>Test mode:</b> no real money is charged. In the Razorpay window pick UPI and enter
+      <code>success@razorpay</code> (or <code>failure@razorpay</code> to try a failed payment), or use a
+      <a href="https://razorpay.com/docs/payments/payments/test-card-details/" target="_blank" rel="noopener">Razorpay test card</a>.</div>` : ''}
+    ${b.configured
+      ? `<button class="btn primary pay-now" id="pay-now" type="button">${fa('lock')}Pay ${rupees(b.fee)}</button>
+         ${failed ? `<p class="error">Last attempt: ${esc(failed)}</p>` : ''}
+         <p class="hint pay-secure">${fa('shield-halved')}Payments are handled by Razorpay. This application never sees card or bank details.</p>`
+      : '<div class="notice">Payments are not set up on this server yet. Contact the platform owner.</div>'}`;
+  const button = $('#pay-now');
+  if (button) button.onclick = () => payNow(button);
+}
+
+async function payNow(button) {
+  const idle = button.innerHTML;
+  const busy = text => { button.disabled = true; button.innerHTML = `${fa('spinner fa-spin')}${text}`; };
+  busy('Opening Razorpay…');
+  try {
+    await loadCheckout();
+    const order = await api('/billing/order', { method: 'POST' });
+    const checkout = new window.Razorpay({
+      key: order.key_id, order_id: order.order_id, amount: order.amount, currency: order.currency,
+      name: order.name, description: order.description, prefill: order.prefill, theme: { color: '#4f46e5' },
+      handler: async ({ razorpay_order_id, razorpay_payment_id, razorpay_signature }) => {
+        busy('Confirming the payment…');
+        try {
+          await api('/billing/verify', { method: 'POST', body: { razorpay_order_id, razorpay_payment_id, razorpay_signature } });
+          await enterApp('Payment received. Your company is registered.');
+        } catch (error) {
+          toast(error.message, true);
+          await drawPayment();
+        }
+      },
+      // Closed without paying, or after paying but before reporting back: the server asks Razorpay again
+      modal: { ondismiss: () => drawPayment() },
+    });
+    checkout.on('payment.failed', response => toast(response.error?.description || 'The payment failed. Try again.', true));
+    checkout.open();
+    button.disabled = false;
+    button.innerHTML = idle;
+  } catch (error) {
+    toast(error.message, true);
+    button.disabled = false;
+    button.innerHTML = idle;
+  }
 }
 
 $('#pay-sign-out').onclick = async () => {
@@ -1058,56 +1054,24 @@ $('#pay-sign-out').onclick = async () => {
 };
 
 pages.payments = async (_, query) => {
-  const params = { status: query.has('status') ? query.get('status') : 'needs_review', page: query.get('page') || 1 };
+  const params = { status: query.get('status') || '', page: query.get('page') || 1 };
   const data = await api('/platform/payments', { params });
-  const summary = checks => {
-    const open = checks.filter(c => c.ok !== true);
-    return open.length ? checkList(open) : `<span class="muted">All ${checks.length} checks passed</span>`;
-  };
   page().innerHTML = `
     <div class="page-head"><h1>Payments</h1></div>
-    <div class="notice">Registration fees of new companies. The AI check rejects wrong and reused proofs by itself; every other payment waits here.
-      It reads only the screenshot and cannot see your bank account, so accept a payment only after you find its UTR and amount in your bank or UPI app.
-      Rejecting an accepted payment locks that company again.</div>
-    <form class="filters" id="filters"><label>Status<select name="status">${[['needs_review', 'Needs review'], ['accepted', 'Accepted'], ['rejected', 'Rejected'], ['', 'All']]
+    <div class="notice">Registration fees of new companies, paid through Razorpay. A company becomes active by itself once Razorpay
+      confirms its payment. Refunds and settlements are in the Razorpay Dashboard.</div>
+    <form class="filters" id="filters"><label>Status<select name="status">${[['', 'All'], ['paid', 'Paid'], ['unpaid', 'Unpaid']]
       .map(([v, t]) => `<option value="${v}" ${v === params.status ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
       <button class="btn" type="submit">Apply</button></form>
     ${table([
-      { title: 'When', cell: p => when(p.created_at) },
-      { title: 'Company', cell: p => `${esc(p.organization_name)}<div class="muted">${esc(p.submitted_by_email)}</div>` },
-      { title: 'UTR', cell: p => `<code>${esc(p.utr)}</code>` },
+      { title: 'When', cell: p => when(p.paid_at || p.created_at) },
+      { title: 'Company', cell: p => `${esc(p.organization_name)}<div class="muted">${esc(p.created_by_email)}</div>` },
       { title: 'Amount', num: true, cell: p => rupees(p.amount) },
-      { title: 'Checks', cell: p => summary(p.checks) },
-      { title: 'Status', cell: p => badge(p.status) + (p.decided_by ? `<div class="muted">${esc(p.decided_by)}</div>` : '') },
-      { title: '', cell: p => `<div class="actions">
-          <button class="btn small" data-action="pay-shot" data-id="${esc(p.id)}">Screenshot</button>
-          ${p.status !== 'accepted' ? `<button class="btn small" data-action="pay-accept" data-id="${esc(p.id)}">Accept</button>` : ''}
-          ${p.status !== 'rejected' ? `<button class="btn small danger" data-action="pay-reject" data-id="${esc(p.id)}">Reject</button>` : ''}</div>` },
+      { title: 'Razorpay', cell: p => `${p.payment_id ? `<code>${esc(p.payment_id)}</code>` : ''}<div class="muted">${esc(p.order_id)}${p.method ? ` · ${esc(p.method)}` : ''}</div>` },
+      { title: 'Status', cell: p => badge(p.status) + (p.test_mode ? ' <span class="badge">test</span>' : '') + (p.error ? `<div class="muted">${esc(p.error)}</div>` : '') },
     ], data.items, { empty: 'No payments here.' })}${pager(data, 'pay-page')}`;
-  const picked = el => data.items.find(p => p.id === el.dataset.id);
   $('#filters').onsubmit = event => { event.preventDefault(); location.hash = '#/payments?' + new URLSearchParams(new FormData(event.target)); };
   actions['pay-page'] = el => { query.set('page', el.dataset.page); location.hash = '#/payments?' + query; };
-  actions['pay-shot'] = el => attempt(async () => {
-    const blob = await (await api(`/platform/payments/${el.dataset.id}/screenshot`, { raw: true })).blob();
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank', 'noopener');
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  });
-  actions['pay-accept'] = async el => {
-    const p = picked(el);
-    if (!await confirmDialog('Accept this payment?', `Only if UTR ${p.utr} for ${rupees(p.amount)} is in your bank account. ${p.organization_name} becomes active and gets the registration email.`, 'Accept payment', 'warn')) return;
-    if (await attempt(() => api(`/platform/payments/${p.id}/decision`, { method: 'POST', body: { decision: 'accept' } }), 'Payment accepted')) route();
-  };
-  actions['pay-reject'] = async el => {
-    const p = picked(el);
-    const done = await formDialog({
-      title: 'Reject this payment?', submitLabel: 'Reject', tone: 'danger',
-      note: `${p.organization_name} gets an email and can send a new proof.${p.status === 'accepted' ? ' The company loses access until it pays.' : ''}`,
-      fields: [{ name: 'note', label: 'Reason (sent to the company)', type: 'textarea', rows: 2, maxlength: 300 }],
-      submit: values => api(`/platform/payments/${p.id}/decision`, { method: 'POST', body: { decision: 'reject', note: values.note } }),
-    });
-    if (done) { toast('Payment rejected'); route(); }
-  };
 };
 
 function showApp() {
@@ -1115,7 +1079,6 @@ function showApp() {
     showPayment();
     return;
   }
-  clearTimeout(payTimer);
   $('#auth').hidden = true;
   $('#pay').hidden = true;
   $('#app').hidden = false;
@@ -1142,7 +1105,6 @@ function signOut() {
   me = null;
   chatLog.length = 0;
   sessionStorage.removeItem('token');
-  clearTimeout(payTimer);
   $('#app').hidden = true;
   $('#pay').hidden = true;
   $('#auth').hidden = false;

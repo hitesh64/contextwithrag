@@ -25,7 +25,7 @@ conflicts = db["conflicts"]
 # Original uploaded files, only when FILE_STORE=database
 stored_files = db["stored_files"]
 counters = db["counters"]
-# Registration fee payments: one record per submitted proof (UTR + screenshot)
+# Registration fee payments: one record per Razorpay order
 payments = db["payments"]
 
 
@@ -48,10 +48,9 @@ def init_db() -> None:
     conflicts.create_index([("organization_id", ASCENDING), ("status", ASCENDING), ("last_seen_at", DESCENDING)])
     payments.create_index([("organization_id", ASCENDING), ("created_at", DESCENDING)])
     payments.create_index([("status", ASCENDING), ("created_at", DESCENDING)])
-    payments.create_index("utr")
-    payments.create_index("screenshot_hash")
-    # Set only on an accepted payment: one bank transaction can activate one company, never two
-    payments.create_index("accepted_utr", unique=True, sparse=True)
+    payments.create_index("order_id", unique=True, sparse=True)
+    # Set only once paid: one Razorpay payment can activate one company, never two
+    payments.create_index("payment_id", unique=True, sparse=True)
 
 
 def next_number(organization_id: str, kind: str) -> int:

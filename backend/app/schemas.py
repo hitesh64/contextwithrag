@@ -156,7 +156,8 @@ class ConflictResolveIn(Body):
     note: str = Field(min_length=10, max_length=1000)
 
 
-class PaymentDecisionIn(Body):
-    """The platform owner's decision about a registration payment, after checking the bank statement."""
-    decision: Literal["accept", "reject"]
-    note: str = Field("", max_length=300)
+class PaymentVerifyIn(Body):
+    """What Razorpay Checkout hands the browser after a payment."""
+    razorpay_order_id: str = Field(..., min_length=1, max_length=64)
+    razorpay_payment_id: str = Field(..., min_length=1, max_length=64)
+    razorpay_signature: str = Field(..., min_length=1, max_length=256)

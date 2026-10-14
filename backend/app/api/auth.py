@@ -10,7 +10,7 @@ from ..core.security import (
 )
 from ..core.utils import RateLimiter, clean, now, oid, paginate
 from ..schemas import LoginIn, RegisterIn, UserCreate, UserUpdate
-from ..services import audit_service
+from ..services import audit_service, razorpay
 from .organization import logo_url
 
 router = APIRouter(tags=["auth"])
@@ -74,7 +74,7 @@ def register(body: RegisterIn, request: Request, response: Response):
     """Create a new factory workspace; the person signing up becomes its administrator.
 
     Registering again with the email and password of a company that has not paid yet continues that registration,
-    so an unfinished sign-up never forces a second company (whose UTR would then clash with the first)."""
+    so an unfinished sign-up never forces a second company."""
     login_limiter.check(f"register:{request.client.host if request.client else ''}")
     existing = users.find_one({"email": body.email.lower()})
     if existing:
@@ -90,8 +90,8 @@ def register(body: RegisterIn, request: Request, response: Response):
         return _user_out(users.find_one({"_id": existing["_id"]}))
     # Active only after the registration fee is paid; the platform owner's own company never pays
     paid = settings.REGISTRATION_FEE <= 0 or body.email.lower() == settings.PLATFORM_OWNER_EMAIL
-    if not paid and not settings.UPI_ID:
-        # Without a UPI ID there is no way to pay, and the new company would be stuck on the payment page
+    if not paid and not razorpay.configured():
+        # Without Razorpay keys there is no way to pay, and the new company would be stuck on the payment page
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
                             "Registration is closed: payments are not set up on this server yet. Contact the platform owner.")
     org_id = organizations.insert_one({

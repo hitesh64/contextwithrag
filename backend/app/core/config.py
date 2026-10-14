@@ -63,12 +63,15 @@ class Settings:
     # Whether the person who wrote a work order may also approve it
     ALLOW_SELF_APPROVAL = _flag("ALLOW_SELF_APPROVAL")
 
-    # Registration fee of a new company, in whole rupees, paid by UPI to UPI_ID. 0: no payment, a new company is
-    # active at once. The payment is checked from the payer's screenshot (see services/payment_check.py).
+    # Registration fee of a new company, in whole rupees, paid through Razorpay Checkout. 0: no payment, a new
+    # company is active at once. Test keys (rzp_test_...) take only test money: nothing is really charged.
     REGISTRATION_FEE = int(os.getenv("REGISTRATION_FEE", "2999"))
-    UPI_ID = os.getenv("UPI_ID", "").strip()
-    UPI_PAYEE_NAME = os.getenv("UPI_PAYEE_NAME", "ContextBasedRAG").strip()
-    # Who reviews the payments the check could not decide. Signs in like any other user; not shown to companies.
+    RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "").strip()
+    RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "").strip()
+    # Optional: the secret of a webhook (Razorpay Dashboard -> Webhooks) to /api/v1/billing/webhook, for payments
+    # whose browser closed before it reported back. Without it the payment page asks Razorpay itself.
+    RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "").strip()
+    # Sees every company's payment on the Payments page; the owner's own company never pays
     PLATFORM_OWNER_EMAIL = os.getenv("PLATFORM_OWNER_EMAIL", "").strip().lower()
 
     # Outgoing mail (Gmail: smtp.gmail.com, 587, the account address and an app password). Empty SMTP_USER: no mail.

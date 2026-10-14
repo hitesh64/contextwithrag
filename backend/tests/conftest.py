@@ -21,7 +21,8 @@ os.environ.update(
     LOGIN_RATE_PER_MINUTE="1000",
     CORS_ORIGINS="",
     LOCAL_TIMEZONE="UTC",
-    UPI_ID="owner@okbank",
+    RAZORPAY_KEY_ID="rzp_test_conftest",
+    RAZORPAY_KEY_SECRET="conftest-secret",
 )
 
 import pytest  # noqa: E402

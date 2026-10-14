@@ -43,9 +43,12 @@ services:
         value: "false"
       - key: REGISTRATION_FEE
         value: 2999
-      - key: UPI_ID
+      # Razorpay API keys (test keys: rzp_test_..., test money only)
+      - key: RAZORPAY_KEY_ID
         sync: false
-      - key: UPI_PAYEE_NAME
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
       - key: PLATFORM_OWNER_EMAIL
         sync: false

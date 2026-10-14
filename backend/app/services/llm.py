@@ -77,11 +77,6 @@ def generate(prompt: str, system: str, json_output: bool = False) -> str:
     return _generate_with_backup(prompt, system, json_output)
 
 
-def generate_with_image(prompt: str, system: str, image: bytes, mime_type: str) -> str:
-    """A JSON answer about one image (a payment screenshot), read together with the prompt."""
-    return _generate_with_backup([types.Part.from_bytes(data=image, mime_type=mime_type), prompt], system, True)
-
-
 def _embed_batch(texts: list[str], task: str) -> list[list[float]]:
     config = types.EmbedContentConfig(task_type=task, output_dimensionality=EMBED_DIMENSIONS)
     for wait in (*EMBED_QUOTA_WAITS, None):

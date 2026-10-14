@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pymongo.errors import PyMongoError
 
 from .api import (
-    assets, audit, auth, billing, breakdowns, chat, conflicts, documents, organization, payment_review, work_orders,
+    assets, audit, auth, billing, breakdowns, chat, conflicts, documents, organization, work_orders,
 )
 from .core.config import settings
 from .core.database import documents as document_records, init_db
@@ -94,8 +94,6 @@ api = APIRouter(prefix="/api/v1")
 for module in (auth, organization, billing, assets, documents, chat, conflicts, breakdowns, work_orders, audit):
     api.include_router(module.router)
 app.include_router(api)
-# The page behind the buttons in the owner's payment mail: a plain address, outside the JSON API
-app.include_router(payment_review.router)
 
 class RevalidatedFiles(StaticFiles):
     """Scripts and styles are checked with the server before a stored copy is used. Otherwise a browser keeps

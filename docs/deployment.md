@@ -69,21 +69,24 @@ The service deploys from `main` automatically. The new application is on `factor
 
 ## Registration fee, mail and logo
 
-A new company pays `REGISTRATION_FEE` (₹2999) by UPI before it can use the application. Set in the
-Render dashboard:
+A new company pays `REGISTRATION_FEE` (₹2999) through Razorpay Checkout before it can use the
+application. Set in the Render dashboard:
 
-- `UPI_ID` and `UPI_PAYEE_NAME`: where the money goes; the QR code is made from them.
-- `PLATFORM_OWNER_EMAIL`: the account that sees the **Payments** page and reviews the payments the AI
-  check could not confirm. That account's own company never pays.
+- `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`: Razorpay Dashboard → Test Mode → Account & Settings →
+  API Keys. Test keys (`rzp_test_…`) take only test money: Checkout offers test cards and the UPI ID
+  `success@razorpay`, and nothing is charged. Live keys (`rzp_live_…`) take real money once the Razorpay
+  account is activated (KYC); no code changes.
+- `RAZORPAY_WEBHOOK_SECRET` (optional): add a webhook in the Razorpay Dashboard to
+  `https://<address>/api/v1/billing/webhook` for `payment.captured` and `order.paid`, with a secret of
+  your choice. It counts a payment whose browser closed before reporting back. Without it the payment
+  page asks Razorpay about the open order when it is opened again.
+- `PLATFORM_OWNER_EMAIL`: the account that sees the **Payments** page. That account's own company never pays.
 - `SMTP_USER` (the Gmail address) and `SMTP_PASSWORD` (a Gmail **app password**), and `APP_BASE_URL`
   (`https://<address>`), for the "your company is registered" mail.
 
-The check reads the payer's screenshot and rejects a wrong or reused proof by itself. It cannot see
-the bank account and a made-up screenshot can pass it, so no payment is accepted automatically: the
-owner finds the UTR in the bank or UPI app and accepts it. The owner's mail for each waiting payment has
-the screenshot attached and Accept / Reject buttons; each opens a page where one more click decides
-(mail scanners open links by themselves, so opening a link changes nothing). A link works once, for 7
-days. The Payments page does the same. Rejecting an accepted payment locks that company again. Each proof costs one Gemini call (free key: ~20 a day).
+A company becomes active only when the server has seen the payment at Razorpay: the Checkout signature
+(HMAC with the key secret) and the payment fetched from Razorpay must both be right (captured, the fee,
+this company's order). Refunds are made in the Razorpay Dashboard.
 
 Render's support has said outgoing SMTP ports are blocked on its services. If the log shows
 `Mail to … could not be sent`, mail works only from a machine that allows SMTP, or through an

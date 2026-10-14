@@ -1,70 +1,75 @@
-"""Registration fee by UPI: QR code, proof checks, the platform owner's review, mails, and the company logo."""
+"""Registration fee through Razorpay (a fake Razorpay here), registering again before paying, and the company logo."""
+import hashlib
+import hmac
 import json
-import re
-from datetime import timedelta
 
 import pytest
 
-from backend.app.api import billing
+from backend.app.api import auth
 from backend.app.core import database
 from backend.app.core.config import settings
-from backend.app.core.utils import now
-from backend.app.services import llm, mailer
+from backend.app.services import mailer, razorpay
 
 from .conftest import API, PASSWORD, Factory
 
 OWNER = "owner@platform.example.com"
 PNG = b"\x89PNG\r\n\x1a\n" + b"picture-bytes"
+SECRET = "test-key-secret"
+WEBHOOK_SECRET = "test-webhook-secret"
+
+
+class FakeRazorpay:
+    """Stands in for api.razorpay.com: orders, payments made in Checkout, capture."""
+
+    def __init__(self):
+        self.orders, self.payments, self.down = {}, {}, False
+
+    def __call__(self, method, path, json=None):
+        if self.down:
+            raise razorpay.RazorpayError("Razorpay could not be reached (ConnectError). Try again.")
+        parts = path.strip("/").split("/")
+        if method == "POST" and parts == ["orders"]:
+            order = {"id": f"order_{len(self.orders) + 1}", "status": "created", **json}
+            self.orders[order["id"]] = order
+            return order
+        if method == "GET" and parts[0] == "orders":
+            return {"items": [p for p in self.payments.values() if p["order_id"] == parts[1]]}
+        if method == "GET" and parts[0] == "payments":
+            return self.payments[parts[1]]
+        if method == "POST" and parts[2:] == ["capture"]:
+            self.payments[parts[1]]["status"] = "captured"
+            return self.payments[parts[1]]
+        raise AssertionError(f"unexpected Razorpay call {method} {path}")
+
+    def pay(self, order_id: str, status: str = "captured", amount: int | None = None) -> dict:
+        """What Checkout gives the browser after paying: ids and a signature made with the key secret."""
+        payment_id = f"pay_{len(self.payments) + 1}"
+        self.payments[payment_id] = {
+            "id": payment_id, "order_id": order_id, "amount": amount or self.orders[order_id]["amount"],
+            "currency": "INR", "status": status, "method": "upi",
+            "error_description": "Payment failed at the bank." if status == "failed" else None,
+        }
+        signature = hmac.new(SECRET.encode(), f"{order_id}|{payment_id}".encode(), hashlib.sha256).hexdigest()
+        return {"razorpay_order_id": order_id, "razorpay_payment_id": payment_id, "razorpay_signature": signature}
 
 
 @pytest.fixture(autouse=True)
-def fee(monkeypatch):
+def gateway(monkeypatch):
     monkeypatch.setattr(settings, "REGISTRATION_FEE", 2999)
-    monkeypatch.setattr(settings, "UPI_ID", "owner@okbank")
-    monkeypatch.setattr(settings, "UPI_PAYEE_NAME", "Platform Owner")
+    monkeypatch.setattr(settings, "RAZORPAY_KEY_ID", "rzp_test_example")
+    monkeypatch.setattr(settings, "RAZORPAY_KEY_SECRET", SECRET)
+    monkeypatch.setattr(settings, "RAZORPAY_WEBHOOK_SECRET", WEBHOOK_SECRET)
     monkeypatch.setattr(settings, "PLATFORM_OWNER_EMAIL", OWNER)
-    billing.proof_limiter.reset()
+    fake = FakeRazorpay()
+    monkeypatch.setattr(razorpay, "_call", fake)
+    return fake
 
 
 @pytest.fixture
 def mails(monkeypatch):
     sent = []
-    def send(to, subject, text, html_body=None, attachment=None):
-        sent.append({"to": to, "subject": subject, "text": text, "html": html_body, "attachment": attachment})
-
-    monkeypatch.setattr(mailer, "send", send)
+    monkeypatch.setattr(mailer, "send", lambda to, subject, text: sent.append({"to": to, "subject": subject, "text": text}))
     return sent
-
-
-class Screenshot:
-    """Stands in for Gemini reading a screenshot: set .read to a dict or an exception."""
-
-    def __init__(self):
-        self.calls = 0
-        self.read = {}
-        self.prompts = []
-
-    def __call__(self, prompt, system, image, mime_type):
-        self.calls += 1
-        self.prompts.append(prompt)
-        if isinstance(self.read, Exception):
-            raise self.read
-        return json.dumps(self.read)
-
-
-@pytest.fixture
-def screenshot(monkeypatch):
-    fake = Screenshot()
-    monkeypatch.setattr(llm, "generate_with_image", fake)
-    return fake
-
-
-def good_read(utr: str) -> dict:
-    return {
-        "is_upi_payment_screenshot": True, "status": "success", "amount": 2999, "utr": utr,
-        "payee_upi_id": "owner@okbank", "payee_name": "Platform Owner",
-        "paid_on": now().date().isoformat(), "note": None, "signs_of_editing": [],
-    }
 
 
 def register(client, name: str) -> dict:
@@ -77,8 +82,18 @@ def register(client, name: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def prove(client, headers, utr: str, picture: bytes = PNG, kind: str = "image/png"):
-    return client.post(f"{API}/billing/proof", headers=headers, data={"utr": utr}, files={"screenshot": ("pay.png", picture, kind)})
+def order(client, headers) -> dict:
+    response = client.post(f"{API}/billing/order", headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def verify(client, headers, paid: dict):
+    return client.post(f"{API}/billing/verify", headers=headers, json=paid)
+
+
+def status_of(client, headers) -> str:
+    return client.get(f"{API}/auth/me", headers=headers).json()["organization_status"]
 
 
 def owner_headers(client) -> dict:
@@ -90,15 +105,12 @@ def owner_headers(client) -> dict:
 
 def test_new_company_waits_for_payment(client):
     headers = register(client, "acme")
-    me = client.get(f"{API}/auth/me", headers=headers).json()
-    assert me["organization_status"] == "pending_payment"
+    assert status_of(client, headers) == "pending_payment"
     for path in ("assets", "documents", "dashboard", "users", "assets/options"):
         assert client.get(f"{API}/{path}", headers=headers).status_code == 402, path
     info = client.get(f"{API}/billing", headers=headers).json()
     assert info["fee"] == 2999 and info["status"] == "pending_payment"
-    assert info["upi_uri"].startswith("upi://pay?pa=owner@okbank&") and "am=2999.00" in info["upi_uri"]
-    assert info["reference"] in info["upi_uri"]
-    assert info["qr_svg"].startswith("<svg")
+    assert info["configured"] is True and info["test_mode"] is True and info["payments"] == []
 
 
 def test_no_fee_means_active_at_once(client, monkeypatch):
@@ -107,9 +119,9 @@ def test_no_fee_means_active_at_once(client, monkeypatch):
     assert client.get(f"{API}/assets", headers=headers).status_code == 200
 
 
-def test_no_upi_id_closes_registration(client, monkeypatch):
-    """Without a UPI ID a new company could never pay, so it is not created at all."""
-    monkeypatch.setattr(settings, "UPI_ID", "")
+def test_no_razorpay_keys_closes_registration(client, monkeypatch):
+    """Without keys a new company could never pay, so it is not created at all."""
+    monkeypatch.setattr(settings, "RAZORPAY_KEY_SECRET", "")
     assert client.get(f"{API}/billing/fee").json() == {"fee": 2999, "configured": False}
     refused = client.post(f"{API}/auth/register", json={
         "organization_name": "stuck", "name": "stuck admin", "email": "admin@stuck.example.com", "password": PASSWORD,
@@ -118,88 +130,110 @@ def test_no_upi_id_closes_registration(client, monkeypatch):
     assert database.organizations.find_one({"name": "stuck"}) is None
 
 
-def accept(client, owner: dict, payment: dict) -> dict:
-    decided = client.post(f"{API}/platform/payments/{payment['id']}/decision", headers=owner, json={"decision": "accept"})
-    assert decided.status_code == 200, decided.text
-    return decided.json()
-
-
-def test_correct_proof_still_waits_for_the_owner(client, screenshot, mails):
-    """A made-up screenshot can pass every check, so only the owner, who sees the bank account, accepts."""
+def test_paying_activates_the_company(client, gateway, mails):
     headers = register(client, "acme")
-    screenshot.read = good_read("123456789012")
-    response = prove(client, headers, "1234 5678 9012")
-    assert response.status_code == 201, response.text
-    body = response.json()
-    assert body["payment"]["status"] == "needs_review" and body["payment"]["checks_passed"] is True
-    assert body["organization_status"] == "pending_payment"
-    assert all(c["ok"] for c in body["payment"]["checks"])
-    # The model's own idea of today is out of date: it is told the date, so a payment made today is not "future"
-    assert f"Today is {now().date().isoformat()}" in screenshot.prompts[0]
-    assert "screenshot" not in body["payment"]
-    assert client.get(f"{API}/assets", headers=headers).status_code == 402
-    assert [m["to"] for m in mails] == [OWNER] and "Payment to confirm" in mails[0]["subject"]
-    assert prove(client, headers, "123456789012").status_code == 409  # waits for the owner
+    checkout = order(client, headers)
+    assert checkout["key_id"] == "rzp_test_example" and checkout["amount"] == 299900 and checkout["currency"] == "INR"
+    assert gateway.orders[checkout["order_id"]]["amount"] == 299900
 
-    accept(client, owner_headers(client), body["payment"])
+    paid = gateway.pay(checkout["order_id"])
+    response = verify(client, headers, paid)
+    assert response.status_code == 200, response.text
+    assert response.json()["organization_status"] == "active"
     assert client.get(f"{API}/assets", headers=headers).status_code == 200
-    company = [m for m in mails if m["to"] == "admin@acme.example.com"]
-    assert len(company) == 1 and "acme is registered on ContextBasedRAG" in company[0]["subject"]
-    assert prove(client, headers, "123456789012").status_code == 409  # already active
+    record = client.get(f"{API}/billing", headers=headers).json()["payments"][0]
+    assert record["status"] == "paid" and record["payment_id"] == paid["razorpay_payment_id"] and record["method"] == "upi"
+    assert [m["to"] for m in mails] == ["admin@acme.example.com"] and paid["razorpay_payment_id"] in mails[0]["text"]
+
+    assert verify(client, headers, paid).status_code == 200  # reported twice: counted once
+    assert len(mails) == 1
+    assert client.post(f"{API}/billing/order", headers=headers).status_code == 409
 
 
-@pytest.mark.parametrize("change, failed", [
-    ({"amount": 299}, "amount"),
-    ({"status": "failed"}, "status"),
-    ({"utr": "999999999999"}, "utr_matches"),
-    ({"payee_upi_id": "someone@else"}, "payee"),
-    ({"is_upi_payment_screenshot": False}, "receipt"),
-])
-def test_wrong_proof_is_rejected(client, screenshot, mails, change, failed):
+def test_an_unpaid_order_is_reused(client, gateway):
     headers = register(client, "acme")
-    screenshot.read = {**good_read("123456789012"), **change}
-    body = prove(client, headers, "123456789012").json()
-    assert body["payment"]["status"] == "rejected" and body["organization_status"] == "pending_payment"
-    assert [c["key"] for c in body["payment"]["checks"] if c["ok"] is False] == [failed]
-    assert client.get(f"{API}/assets", headers=headers).status_code == 402
-    assert not mails
+    assert order(client, headers)["order_id"] == order(client, headers)["order_id"]
+    assert len(gateway.orders) == 1
 
 
-def test_payment_dated_before_registration_is_rejected(client, screenshot):
+def test_made_up_signature_is_refused(client, gateway):
     headers = register(client, "acme")
-    screenshot.read = {**good_read("123456789012"), "paid_on": (now() - timedelta(days=3)).date().isoformat()}
-    body = prove(client, headers, "123456789012").json()
-    assert body["payment"]["status"] == "rejected"
+    paid = gateway.pay(order(client, headers)["order_id"])
+    assert verify(client, headers, {**paid, "razorpay_signature": "0" * 64}).status_code == 400
+    assert status_of(client, headers) == "pending_payment"
 
 
-def test_payment_timed_later_than_now_is_rejected(client, screenshot):
-    """A screenshot showing a time that has not come yet cannot be a real payment."""
+def test_signature_alone_is_not_enough(client, gateway):
+    """A failed or underpaid payment at Razorpay activates nothing, whatever the browser says."""
     headers = register(client, "acme")
-    later = now() + timedelta(hours=1)
-    screenshot.read = {**good_read("123456789012"), "paid_on": later.date().isoformat(), "paid_at": f"{later:%H:%M}"}
-    payment = prove(client, headers, "123456789012").json()["payment"]
-    assert payment["status"] == "rejected"
-    assert [c["key"] for c in payment["checks"] if c["ok"] is False] == ["date"]
+    order_id = order(client, headers)["order_id"]
+    failed = verify(client, headers, gateway.pay(order_id, status="failed"))
+    assert failed.status_code == 402
+    assert client.get(f"{API}/billing", headers=headers).json()["payments"][0]["error"] == "Payment failed at the bank."
+    assert verify(client, headers, gateway.pay(order_id, amount=100)).status_code == 402
+    assert status_of(client, headers) == "pending_payment"
 
 
-def test_payment_with_a_minute_of_clock_drift_passes(client, screenshot):
+def test_authorised_payment_is_captured(client, gateway):
     headers = register(client, "acme")
-    screenshot.read = {**good_read("123456789012"), "paid_at": f"{now() + timedelta(minutes=1):%H:%M}"}
-    payment = prove(client, headers, "123456789012").json()["payment"]
-    assert payment["status"] == "needs_review" and payment["checks_passed"] is True
+    paid = gateway.pay(order(client, headers)["order_id"], status="authorized")
+    assert verify(client, headers, paid).status_code == 200
+    assert gateway.payments[paid["razorpay_payment_id"]]["status"] == "captured"
+    assert status_of(client, headers) == "active"
 
 
-def test_another_companys_reference_is_rejected(client, screenshot):
+def test_another_companys_order_is_refused(client, gateway):
+    first, second = register(client, "acme"), register(client, "other")
+    paid = gateway.pay(order(client, first)["order_id"])
+    assert verify(client, second, paid).status_code == 404
+    assert status_of(client, second) == "pending_payment"
+
+
+def test_payment_counts_when_the_browser_closed(client, gateway):
+    """Paid, but Checkout never reported back: the payment page asks Razorpay about the open order."""
     headers = register(client, "acme")
-    reference = client.get(f"{API}/billing", headers=headers).json()["reference"]
-    screenshot.read = {**good_read("123456789012"), "references": ["CBR000000"]}
-    payment = prove(client, headers, "123456789012").json()["payment"]
-    assert payment["status"] == "rejected"
-    assert [c["key"] for c in payment["checks"] if c["ok"] is False] == ["reference"]
+    gateway.pay(order(client, headers)["order_id"])
+    assert client.get(f"{API}/billing", headers=headers).json()["status"] == "active"
 
-    screenshot.read = {**good_read("222222222222"), "note": f"ContextBasedRAG {reference}"}
-    payment = prove(client, headers, "222222222222", PNG + b"2").json()["payment"]
-    assert payment["status"] == "needs_review" and payment["checks_passed"] is True
+
+def test_webhook_activates_the_company(client, gateway):
+    headers = register(client, "acme")
+    paid = gateway.pay(order(client, headers)["order_id"])
+    entity = gateway.payments[paid["razorpay_payment_id"]]
+    event = json.dumps({"event": "payment.captured", "payload": {"payment": {"entity": entity}}})
+    forged = client.post(f"{API}/billing/webhook", content=event, headers={"X-Razorpay-Signature": "0" * 64})
+    assert forged.status_code == 400 and status_of(client, headers) == "pending_payment"
+    signature = hmac.new(WEBHOOK_SECRET.encode(), event.encode(), hashlib.sha256).hexdigest()
+    assert client.post(f"{API}/billing/webhook", content=event, headers={"X-Razorpay-Signature": signature}).status_code == 200
+    assert status_of(client, headers) == "active"
+
+
+def test_razorpay_down_is_reported(client, gateway):
+    headers = register(client, "acme")
+    gateway.down = True
+    response = client.post(f"{API}/billing/order", headers=headers)
+    assert response.status_code == 502 and "could not be reached" in response.json()["detail"]
+
+
+def test_only_the_administrator_pays(client):
+    register(client, "acme")
+    admin = database.users.find_one({"email": "admin@acme.example.com"})
+    auth._new_user(admin["organization_id"], "acme viewer", "viewer@acme.example.com", PASSWORD, "viewer")
+    token = client.post(f"{API}/auth/login", json={"email": "viewer@acme.example.com", "password": PASSWORD}).json()["access_token"]
+    assert client.post(f"{API}/billing/order", headers={"Authorization": f"Bearer {token}"}).status_code == 403
+
+
+def test_owner_sees_every_payment(client, gateway):
+    headers = register(client, "acme")
+    verify(client, headers, gateway.pay(order(client, headers)["order_id"]))
+    register(client, "unpaid")
+    order(client, register(client, "later"))
+    owner = owner_headers(client)
+    every = client.get(f"{API}/platform/payments", headers=owner).json()
+    assert every["total"] == 2
+    paid = client.get(f"{API}/platform/payments", headers=owner, params={"status": "paid"}).json()["items"]
+    assert [p["organization_name"] for p in paid] == ["acme"]
+    assert client.get(f"{API}/platform/payments", headers=headers).status_code == 403
 
 
 def test_registering_again_continues_an_unpaid_registration(client):
@@ -228,83 +262,6 @@ def test_active_company_email_cannot_register_again(client):
     assert factory
 
 
-def test_utr_waiting_for_another_company_goes_to_the_owner(client, screenshot):
-    """Mostly the same person registered twice: the owner decides, and only one payment can be accepted."""
-    first = register(client, "acme")
-    screenshot.read = good_read("123456789012")
-    first_payment = prove(client, first, "123456789012").json()["payment"]
-    second = register(client, "acme-again")
-    second_payment = prove(client, second, "123456789012").json()["payment"]
-    assert second_payment["status"] == "needs_review" and second_payment["checks_passed"] is False
-    assert [c["ok"] for c in second_payment["checks"][:2]] == [None, None]
-    assert "also sent for acme" in second_payment["checks"][0]["detail"]
-
-    owner = owner_headers(client)
-    assert accept(client, owner, first_payment)["status"] == "accepted"
-    assert accept(client, owner, second_payment)["status"] == "rejected"
-
-
-def test_reused_utr_or_screenshot_is_rejected_without_a_model_call(client, screenshot):
-    first = register(client, "acme")
-    screenshot.read = good_read("123456789012")
-    accept(client, owner_headers(client), prove(client, first, "123456789012").json()["payment"])
-    calls = screenshot.calls
-
-    second = register(client, "copycat")
-    same_utr = prove(client, second, "123456789012", PNG + b"other").json()["payment"]
-    assert same_utr["status"] == "rejected" and same_utr["checks"][0]["ok"] is False
-    same_picture = prove(client, second, "222222222222").json()["payment"]
-    assert same_picture["status"] == "rejected" and same_picture["checks"][1]["ok"] is False
-    assert screenshot.calls == calls
-
-
-def test_doubtful_proof_goes_to_the_owner(client, screenshot, mails):
-    headers = register(client, "acme")
-    screenshot.read = {**good_read("123456789012"), "signs_of_editing": ["digits in a different font"]}
-    payment = prove(client, headers, "123456789012").json()["payment"]
-    assert payment["status"] == "needs_review" and payment["checks_passed"] is False
-    assert "check found problems" in mails[0]["subject"]
-    assert client.get(f"{API}/platform/payments", headers=headers).status_code == 403
-
-    owner = owner_headers(client)
-    listed = client.get(f"{API}/platform/payments", headers=owner, params={"status": "needs_review"}).json()
-    assert [p["id"] for p in listed["items"]] == [payment["id"]]
-    picture = client.get(f"{API}/platform/payments/{payment['id']}/screenshot", headers=owner)
-    assert picture.content == PNG and picture.headers["content-type"] == "image/png"
-    assert accept(client, owner, payment)["status"] == "accepted"
-    assert client.get(f"{API}/assets", headers=headers).status_code == 200
-    assert any("registered" in m["subject"] for m in mails if m["to"] == "admin@acme.example.com")
-
-
-def test_model_failure_needs_review(client, screenshot):
-    headers = register(client, "acme")
-    screenshot.read = llm.QuotaError("The request quota of the Gemini API key is used up. Try again later.")
-    payment = prove(client, headers, "123456789012").json()["payment"]
-    assert payment["status"] == "needs_review"
-    assert payment["checks"][-1]["key"] == "ai" and payment["checks"][-1]["ok"] is None
-
-
-def test_owner_can_withdraw_an_accepted_payment(client, screenshot, mails):
-    headers = register(client, "acme")
-    screenshot.read = good_read("123456789012")
-    payment = prove(client, headers, "123456789012").json()["payment"]
-    owner = owner_headers(client)
-    accept(client, owner, payment)
-    assert client.get(f"{API}/assets", headers=headers).status_code == 200
-    rejected = client.post(f"{API}/platform/payments/{payment['id']}/decision", headers=owner,
-                           json={"decision": "reject", "note": "Not in the bank statement"})
-    assert rejected.json()["status"] == "rejected"
-    assert client.get(f"{API}/assets", headers=headers).status_code == 402
-    assert any("not accepted" in m["subject"] and "Not in the bank statement" in m["text"] for m in mails)
-
-
-def test_proof_input_is_checked(client, screenshot):
-    headers = register(client, "acme")
-    assert prove(client, headers, "12345").status_code == 422
-    assert prove(client, headers, "123456789012", b"<svg onload=alert(1)>", "image/png").status_code == 415
-    assert screenshot.calls == 0
-
-
 def test_company_logo(client):
     headers = register(client, "acme")
     assert client.get(f"{API}/auth/me", headers=headers).json()["organization_logo_url"] is None
@@ -325,60 +282,3 @@ def test_only_the_administrator_changes_the_logo(client, factory):
     viewer = factory.user("viewer")
     response = client.put(f"{API}/organization/logo", headers=viewer, files={"file": ("logo.png", PNG, "image/png")})
     assert response.status_code == 403
-
-
-def review_token(mail: dict) -> str:
-    return re.search(r"payment-review\?token=([\w-]+)&action=accept", mail["text"]).group(1)
-
-
-def test_owner_accepts_from_the_mail(client, screenshot, mails):
-    headers = register(client, "acme")
-    screenshot.read = good_read("123456789012")
-    prove(client, headers, "123456789012")
-    mail = mails[0]
-    assert mail["to"] == OWNER and "Accept payment" in mail["html"] and mail["attachment"][0] == PNG
-    token = review_token(mail)
-    assert token not in json.dumps(client.get(f"{API}/billing", headers=headers).json())  # never shown to the company
-
-    page = client.get("/payment-review", params={"token": token, "action": "accept"})
-    assert page.status_code == 200 and "acme" in page.text and "123456789012" in page.text
-    assert page.headers["referrer-policy"] == "no-referrer"
-    assert client.get("/payment-review/screenshot", params={"token": token}).content == PNG
-    # Opening the link (as a mail scanner does) changes nothing
-    assert client.get(f"{API}/assets", headers=headers).status_code == 402
-
-    done = client.post("/payment-review", data={"token": token, "decision": "accept"})
-    assert done.status_code == 200 and "Payment accepted" in done.text
-    assert client.get(f"{API}/assets", headers=headers).status_code == 200
-    assert any("registered" in m["subject"] for m in mails if m["to"] == "admin@acme.example.com")
-    # Once only
-    assert client.post("/payment-review", data={"token": token, "decision": "reject"}).status_code == 410
-    assert client.get("/payment-review", params={"token": token}).status_code == 410
-    assert client.get("/payment-review/screenshot", params={"token": token}).status_code == 404
-
-
-def test_owner_rejects_from_the_mail(client, screenshot, mails):
-    headers = register(client, "acme")
-    screenshot.read = good_read("123456789012")
-    prove(client, headers, "123456789012")
-    token = review_token(mails[0])
-    done = client.post("/payment-review", data={"token": token, "decision": "reject", "note": "No such UTR in the bank"})
-    assert "Payment rejected" in done.text
-    assert client.get(f"{API}/billing", headers=headers).json()["payments"][0]["status"] == "rejected"
-    assert any("No such UTR in the bank" in m["text"] for m in mails if m["to"] == "admin@acme.example.com")
-
-
-def test_mail_link_stops_working(client, screenshot, mails):
-    headers = register(client, "acme")
-    screenshot.read = good_read("123456789012")
-    payment = prove(client, headers, "123456789012").json()["payment"]
-    token = review_token(mails[0])
-    assert client.get("/payment-review", params={"token": "made-up"}).status_code == 410
-    assert client.post("/payment-review", data={"token": token, "decision": "approve"}).status_code == 410
-
-    database.payments.update_one({}, {"$set": {"review_expires_at": now() - timedelta(seconds=1)}})
-    assert client.post("/payment-review", data={"token": token, "decision": "accept"}).status_code == 410
-    database.payments.update_one({}, {"$set": {"review_expires_at": now() + timedelta(days=1)}})
-    accept(client, owner_headers(client), payment)  # decided on the Payments page instead
-    assert client.post("/payment-review", data={"token": token, "decision": "reject"}).status_code == 410
-    assert client.get(f"{API}/assets", headers=headers).status_code == 200
