@@ -1,5 +1,7 @@
 """The registration fee: the company's QR code and proof of payment, and the platform owner's review."""
+import hashlib
 import re
+import secrets
 from datetime import timedelta
 
 from bson import Binary
@@ -19,13 +21,18 @@ proof_limiter = RateLimiter(3)
 SCREENSHOT_KB = 2048
 # Each proof costs one model call, and a free key allows about 20 a day for the whole platform
 PROOFS_PER_DAY = 5
+# How long the Accept / Reject link in the owner's mail works
+REVIEW_LINK_DAYS = 7
 _NO_PICTURE = {"screenshot": 0}
+_PRIVATE = ("screenshot", "accepted_utr", "review_token_hash", "review_expires_at")
 
 
 def _payment_out(payment: dict) -> dict:
-    out = clean({k: v for k, v in payment.items() if k != "screenshot"})
-    out.pop("accepted_utr", None)
-    return out
+    return clean({k: v for k, v in payment.items() if k not in _PRIVATE})
+
+
+def review_token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def _organization(organization_id: str) -> dict:
@@ -122,10 +129,17 @@ def submit_proof(utr: str = Form(...), screenshot: UploadFile = File(...), user:
         "status": "rejected" if verdict == "rejected" else "needs_review",
         "created_at": now(), "decided_at": None, "decided_by": None, "decision_note": "",
     }
+    review_link = None
+    if payment["status"] == "needs_review":
+        # The owner decides from the mail: only the hash of this random link is kept, like a login token
+        token = secrets.token_urlsafe(32)
+        payment["review_token_hash"] = review_token_hash(token)
+        payment["review_expires_at"] = now() + timedelta(days=REVIEW_LINK_DAYS)
+        review_link = f"{settings.APP_BASE_URL}/payment-review?token={token}"
     payment["_id"] = payments.insert_one(payment).inserted_id
     audit_service.record(user, "payment.submit", "payment", str(payment["_id"]), result=payment["status"], detail=f"UTR {utr}")
-    if payment["status"] != "rejected":
-        mailer.payment_for_owner(org, payment)
+    if review_link:
+        mailer.payment_for_owner(org, payment, review_link, data, kind)
     return {"payment": _payment_out(payment), "organization_status": _organization(org_id).get("status", "active")}
 
 
@@ -153,20 +167,28 @@ def decide_payment(payment_id: str, body: PaymentDecisionIn, owner: dict = Depen
     payment = payments.find_one({"_id": oid(payment_id)}, _NO_PICTURE)
     if payment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
-    if body.decision == "accept":
-        if payment["status"] == "accepted":
-            raise HTTPException(status.HTTP_409_CONFLICT, "This payment is already accepted.")
-        payment = _accept(payment, owner["email"], body.note)
+    if body.decision == "accept" and payment["status"] == "accepted":
+        raise HTTPException(status.HTTP_409_CONFLICT, "This payment is already accepted.")
+    return _payment_out(decide(payment, body.decision, body.note, owner))
+
+
+def decide(payment: dict, decision: str, note: str, owner: dict | None) -> dict:
+    """The owner's decision, from the Payments page or from the link in the mail. Either way the link stops working."""
+    decided_by = owner["email"] if owner else settings.PLATFORM_OWNER_EMAIL
+    payments.update_one({"_id": payment["_id"]}, {"$unset": {"review_token_hash": "", "review_expires_at": ""}})
+    if decision == "accept":
+        payment = _accept(payment, decided_by, note)
     else:
         if payment["status"] == "accepted":
             # The company loses access until it pays: its money never reached the account
             organizations.update_one({"_id": oid(payment["organization_id"])}, {"$set": {"status": "pending_payment"}})
         payments.update_one({"_id": payment["_id"]}, {
-            "$set": {"status": "rejected", "decided_at": now(), "decided_by": owner["email"], "decision_note": body.note},
+            "$set": {"status": "rejected", "decided_at": now(), "decided_by": decided_by, "decision_note": note},
             "$unset": {"accepted_utr": ""},
         })
         payment = payments.find_one({"_id": payment["_id"]}, _NO_PICTURE)
-        mailer.payment_rejected(payment["submitted_by_email"], payment["organization_name"], payment["utr"], body.note)
-    audit_service.record(owner, f"payment.{body.decision}", "payment", payment_id, result=payment["status"],
-                         detail=f"{payment['organization_name']}, UTR {payment['utr']}")
-    return _payment_out(payment)
+        mailer.payment_rejected(payment["submitted_by_email"], payment["organization_name"], payment["utr"], note)
+    if owner:
+        audit_service.record(owner, f"payment.{decision}", "payment", str(payment["_id"]), result=payment["status"],
+                             detail=f"{payment['organization_name']}, UTR {payment['utr']}")
+    return payment

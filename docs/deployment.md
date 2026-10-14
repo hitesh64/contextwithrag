@@ -80,8 +80,10 @@ Render dashboard:
 
 The check reads the payer's screenshot and rejects a wrong or reused proof by itself. It cannot see
 the bank account and a made-up screenshot can pass it, so no payment is accepted automatically: the
-owner finds the UTR in the bank or UPI app and presses Accept on the Payments page (a mail arrives for
-each payment waiting there). Rejecting an accepted payment locks that company again. Each proof costs one Gemini call (free key: ~20 a day).
+owner finds the UTR in the bank or UPI app and accepts it. The owner's mail for each waiting payment has
+the screenshot attached and Accept / Reject buttons; each opens a page where one more click decides
+(mail scanners open links by themselves, so opening a link changes nothing). A link works once, for 7
+days. The Payments page does the same. Rejecting an accepted payment locks that company again. Each proof costs one Gemini call (free key: ~20 a day).
 
 Render's support has said outgoing SMTP ports are blocked on its services. If the log shows
 `Mail to … could not be sent`, mail works only from a machine that allows SMTP, or through an

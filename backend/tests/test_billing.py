@@ -1,5 +1,6 @@
 """Registration fee by UPI: QR code, proof checks, the platform owner's review, mails, and the company logo."""
 import json
+import re
 from datetime import timedelta
 
 import pytest
@@ -28,7 +29,10 @@ def fee(monkeypatch):
 @pytest.fixture
 def mails(monkeypatch):
     sent = []
-    monkeypatch.setattr(mailer, "send", lambda to, subject, text: sent.append({"to": to, "subject": subject, "text": text}))
+    def send(to, subject, text, html_body=None, attachment=None):
+        sent.append({"to": to, "subject": subject, "text": text, "html": html_body, "attachment": attachment})
+
+    monkeypatch.setattr(mailer, "send", send)
     return sent
 
 
@@ -238,3 +242,60 @@ def test_only_the_administrator_changes_the_logo(client, factory):
     viewer = factory.user("viewer")
     response = client.put(f"{API}/organization/logo", headers=viewer, files={"file": ("logo.png", PNG, "image/png")})
     assert response.status_code == 403
+
+
+def review_token(mail: dict) -> str:
+    return re.search(r"payment-review\?token=([\w-]+)&action=accept", mail["text"]).group(1)
+
+
+def test_owner_accepts_from_the_mail(client, screenshot, mails):
+    headers = register(client, "acme")
+    screenshot.read = good_read("123456789012")
+    prove(client, headers, "123456789012")
+    mail = mails[0]
+    assert mail["to"] == OWNER and "Accept payment" in mail["html"] and mail["attachment"][0] == PNG
+    token = review_token(mail)
+    assert token not in json.dumps(client.get(f"{API}/billing", headers=headers).json())  # never shown to the company
+
+    page = client.get("/payment-review", params={"token": token, "action": "accept"})
+    assert page.status_code == 200 and "acme" in page.text and "123456789012" in page.text
+    assert page.headers["referrer-policy"] == "no-referrer"
+    assert client.get("/payment-review/screenshot", params={"token": token}).content == PNG
+    # Opening the link (as a mail scanner does) changes nothing
+    assert client.get(f"{API}/assets", headers=headers).status_code == 402
+
+    done = client.post("/payment-review", data={"token": token, "decision": "accept"})
+    assert done.status_code == 200 and "Payment accepted" in done.text
+    assert client.get(f"{API}/assets", headers=headers).status_code == 200
+    assert any("registered" in m["subject"] for m in mails if m["to"] == "admin@acme.example.com")
+    # Once only
+    assert client.post("/payment-review", data={"token": token, "decision": "reject"}).status_code == 410
+    assert client.get("/payment-review", params={"token": token}).status_code == 410
+    assert client.get("/payment-review/screenshot", params={"token": token}).status_code == 404
+
+
+def test_owner_rejects_from_the_mail(client, screenshot, mails):
+    headers = register(client, "acme")
+    screenshot.read = good_read("123456789012")
+    prove(client, headers, "123456789012")
+    token = review_token(mails[0])
+    done = client.post("/payment-review", data={"token": token, "decision": "reject", "note": "No such UTR in the bank"})
+    assert "Payment rejected" in done.text
+    assert client.get(f"{API}/billing", headers=headers).json()["payments"][0]["status"] == "rejected"
+    assert any("No such UTR in the bank" in m["text"] for m in mails if m["to"] == "admin@acme.example.com")
+
+
+def test_mail_link_stops_working(client, screenshot, mails):
+    headers = register(client, "acme")
+    screenshot.read = good_read("123456789012")
+    payment = prove(client, headers, "123456789012").json()["payment"]
+    token = review_token(mails[0])
+    assert client.get("/payment-review", params={"token": "made-up"}).status_code == 410
+    assert client.post("/payment-review", data={"token": token, "decision": "approve"}).status_code == 410
+
+    database.payments.update_one({}, {"$set": {"review_expires_at": now() - timedelta(seconds=1)}})
+    assert client.post("/payment-review", data={"token": token, "decision": "accept"}).status_code == 410
+    database.payments.update_one({}, {"$set": {"review_expires_at": now() + timedelta(days=1)}})
+    accept(client, owner_headers(client), payment)  # decided on the Payments page instead
+    assert client.post("/payment-review", data={"token": token, "decision": "reject"}).status_code == 410
+    assert client.get(f"{API}/assets", headers=headers).status_code == 200
