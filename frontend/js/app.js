@@ -1174,7 +1174,7 @@ $('#register-logo').onchange = event => {
 $('#register-form').addEventListener('reset', () => setImage($('#register-logo-preview'), null));
 api('/billing/fee').then(({ fee, configured }) => {
   if (fee > 0) $('#register-fee').textContent = configured
-    ? `A one-time registration fee of ${rupees(fee)} is paid by UPI in the next step.`
+    ? `A one-time registration fee of ${rupees(fee)} is paid through Razorpay (UPI, card or net banking) in the next step.`
     : 'New companies cannot register yet: payments are not set up on this server.';
 }).catch(() => {});
 
