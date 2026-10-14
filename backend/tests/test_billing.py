@@ -38,9 +38,11 @@ class Screenshot:
     def __init__(self):
         self.calls = 0
         self.read = {}
+        self.prompts = []
 
     def __call__(self, prompt, system, image, mime_type):
         self.calls += 1
+        self.prompts.append(prompt)
         if isinstance(self.read, Exception):
             raise self.read
         return json.dumps(self.read)
@@ -109,6 +111,8 @@ def test_correct_proof_activates_and_mails(client, screenshot, mails):
     body = response.json()
     assert body["payment"]["status"] == "accepted" and body["organization_status"] == "active"
     assert all(c["ok"] for c in body["payment"]["checks"])
+    # The model's own idea of today is out of date: it is told the date, so a payment made today is not "future"
+    assert f"Today is {now().date().isoformat()}" in screenshot.prompts[0]
     assert "screenshot" not in body["payment"]
     assert client.get(f"{API}/assets", headers=headers).status_code == 200
     company = [m for m in mails if m["to"] == "admin@acme.example.com"]

@@ -41,7 +41,9 @@ Answer with one JSON object with exactly these keys:
 - "paid_on": the payment date as YYYY-MM-DD, or null
 - "note": the payment note / message, or null
 - "signs_of_editing": a list of short descriptions of visible signs that the picture was edited (digits in a
-  different font or size, misaligned or overwritten text, inconsistent spacing or colours); [] if none"""
+  different font or size, misaligned or overwritten text, inconsistent spacing or colours); [] if none.
+  Only what the pixels show: never whether a date, amount or name seems plausible, which is checked elsewhere.
+  Your own idea of the current date is out of date; today's date is given in the message."""
 
 
 def reference(organization_id: str) -> str:
@@ -155,7 +157,8 @@ def screenshot_checks(read: dict, utr: str, registered_at: datetime) -> list[dic
 
 def read_screenshot(image: bytes, mime_type: str) -> dict:
     """What the model sees in the screenshot. Raises llm.LLMError when the model cannot be used."""
-    text = llm.generate_with_image("Read this payment screenshot.", SYSTEM, image, mime_type)
+    today = datetime.now(ZoneInfo(settings.LOCAL_TIMEZONE)).date().isoformat()
+    text = llm.generate_with_image(f"Today is {today}. Read this payment screenshot.", SYSTEM, image, mime_type)
     try:
         read = json.loads(text)
     except json.JSONDecodeError as e:
