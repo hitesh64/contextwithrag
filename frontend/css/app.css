@@ -694,14 +694,21 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
 @keyframes nudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
 
 /* ───────── Company logo ───────── */
+/* Header logo: white marks straight on the dark band (see headerLogo in app.js), a gold rule before the wordmark */
 .hdr-logo {
-  margin-left: 26px; flex: none; height: 62px; max-width: 150px; padding: 6px 10px;
-  display: grid; place-items: center; background: #fff; border-radius: 12px;
-  border: 1px solid rgba(99, 102, 241, .18); box-shadow: 0 6px 16px -10px rgba(49, 46, 129, .5);
+  margin-left: 26px; flex: none; height: 50px; max-width: 170px; padding-right: 18px;
+  display: grid; place-items: center; border-right: 1px solid rgba(227, 194, 127, .4);
   animation: hdr-in .6s cubic-bezier(.2, .8, .2, 1) both;
 }
-.hdr-logo img { max-height: 100%; max-width: 100%; object-fit: contain; display: block; }
-.hdr-logo:not([hidden]) + .hdr-brand { margin-left: 4px; }
+.hdr-logo img {
+  max-height: 100%; max-width: 100%; object-fit: contain; display: block;
+  filter: drop-shadow(0 2px 10px rgba(129, 140, 248, .45));
+  transition: transform .3s var(--ease);
+}
+.hdr-logo:hover img { transform: scale(1.04); }
+/* A photograph used as the logo: kept as it is, framed */
+.hdr-logo.photo img { height: 50px; border-radius: 10px; filter: none; box-shadow: 0 0 0 1px rgba(227, 194, 127, .65), 0 6px 16px -8px rgba(0, 0, 0, .8); }
+.hdr-logo:not([hidden]) + .hdr-brand { margin-left: 0; }
 .chip-logo { flex: none; width: 18px; height: 18px; object-fit: contain; border-radius: 4px; }
 .org-initial {
   display: grid; place-items: center; color: #fff; font-weight: 800;
@@ -745,7 +752,7 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
 .pay-failed .muted { color: #7f1d1d; opacity: .8; font-size: 12px; }
 @media (max-width: 640px) {
   .pay-card { padding: 22px 16px 24px; }
-  .hdr-logo { margin-left: 0; height: 44px; max-width: 110px; }
+  .hdr-logo { margin-left: 0; height: 40px; max-width: 110px; padding-right: 12px; }
   .logo-row { align-items: flex-start; }
 }
 
@@ -765,7 +772,7 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
     border: 1px solid rgba(99, 102, 241, .16); border-radius: 14px;
   }
   .hdr-brand { margin-left: 0; flex: 1 1 auto; align-items: flex-start; min-width: 0; }
-  .hdr-logo { margin-left: 0; height: 44px; max-width: 120px; }
+  .hdr-logo { margin-left: 0; height: 40px; max-width: 120px; padding-right: 12px; }
   .wordmark { font-size: 22px; }
   .hdr-banner, .hdr-shift, .drl, .hdr-deco { display: none; }
   .hdr-controls { flex: 1 1 100%; min-width: 0; margin-left: 0; }

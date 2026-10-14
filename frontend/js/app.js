@@ -947,11 +947,67 @@ function setImage(img, url) {
   else img.removeAttribute('src');
 }
 
+// The header is a dark band: there the logo's own background is taken out and its marks are drawn in white, so a
+// JPG on white, a PNG on transparent or a logo on a dark plate all sit on the header as if printed on it.
+// A photograph has no marks to keep (busy corners, colour everywhere): it is shown as it is, framed.
+async function headerLogo(url) {
+  const img = await new Promise((resolve, reject) => {
+    const picture = new Image();
+    picture.onload = () => resolve(picture);
+    picture.onerror = reject;
+    picture.src = url;
+  });
+  const scale = Math.min(1, 160 / img.naturalHeight, 480 / img.naturalWidth);
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = Object.assign(document.createElement('canvas'), { width: w, height: h });
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h);
+  const px = data.data;
+  const corners = [0, w - 1, (h - 1) * w, h * w - 1].map(i => px.slice(i * 4, i * 4 + 4));
+  const clear = corners.every(c => c[3] < 40);
+  const bg = [0, 1, 2].map(k => corners.reduce((sum, c) => sum + c[k], 0) / 4);
+  const distance = (r, g, b) => Math.hypot(r - bg[0], g - bg[1], b - bg[2]);
+  if (!clear && corners.some(c => distance(c[0], c[1], c[2]) > 60)) return { src: url, photo: true };
+  let ink = 0, left = w, top = h, right = -1, bottom = -1;
+  for (let i = 0; i < w * h; i++) {
+    const p = i * 4;
+    const alpha = px[p + 3] / 255;
+    const mark = clear ? alpha : Math.min(1, distance(px[p], px[p + 1], px[p + 2]) / 120) * alpha;
+    px[p] = px[p + 1] = px[p + 2] = 255;
+    px[p + 3] = Math.round(mark * 255);
+    if (mark > 0.15) {
+      ink++;
+      const x = i % w, y = (i / w) | 0;
+      left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
+    }
+  }
+  if (right < 0 || ink / (w * h) > 0.55) return { src: url, photo: true };
+  ctx.putImageData(data, 0, 0);
+  const pad = 2;
+  const x0 = Math.max(0, left - pad), y0 = Math.max(0, top - pad);
+  const out = Object.assign(document.createElement('canvas'), { width: Math.min(w, right + pad + 1) - x0, height: Math.min(h, bottom + pad + 1) - y0 });
+  out.getContext('2d').drawImage(canvas, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+  return { src: out.toDataURL('image/png'), photo: false };
+}
+
 function showLogos() {
   const url = me.organization_logo_url;
-  $('#hdr-logo').hidden = !url;
-  setImage($('#hdr-logo img'), url);
+  const box = $('#hdr-logo');
+  box.hidden = true; // shown once the white version is ready, never as a white box first
+  setImage($('#hdr-logo img'), null);
   $('#hdr-logo img').alt = url ? `${me.organization_name} logo` : '';
+  if (url) {
+    headerLogo(url)
+      .catch(() => ({ src: url, photo: true }))
+      .then(({ src, photo }) => {
+        if (me?.organization_logo_url !== url) return; // a newer logo or another user meanwhile
+        box.classList.toggle('photo', photo);
+        setImage($('#hdr-logo img'), src);
+        box.hidden = false;
+      });
+  }
   $('#chip-icon').hidden = Boolean(url);
   setImage($('#chip-logo'), url);
   setImage($('#pay-logo'), url);
