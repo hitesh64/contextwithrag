@@ -43,10 +43,17 @@
         </form>
         <form id="register-form" hidden>
           <label>Factory / company name <input name="organization_name" required minlength="2" maxlength="100"></label>
+          <div class="logo-pick">
+            <img id="register-logo-preview" alt="" hidden>
+            <label>Company logo <span class="muted">(optional)</span>
+              <input name="logo" id="register-logo" type="file" accept="image/png,image/jpeg,image/webp">
+              <span class="hint">PNG, JPG or WebP, up to 512 KB. Shown in your header and dashboard.</span></label>
+          </div>
           <label>Your name <input name="name" required minlength="2" maxlength="80"></label>
           <label>Email <input name="email" type="email" required autocomplete="username"></label>
           <label>Password <input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
-          <p class="hint">You become the administrator of this factory and can add your team afterwards.</p>
+          <p class="hint">You become the administrator of this factory and can add your team afterwards.
+            <span id="register-fee"></span></p>
           <div class="auth-actions">
             <button class="btn" type="button" data-swipe-back><i class="fa-solid fa-arrow-left"></i>Back</button>
             <button class="btn primary" type="submit">Create workspace</button>
@@ -54,6 +61,19 @@
         </form>
       </div>
       <p id="auth-error" class="error" role="alert"></p>
+    </section>
+  </main>
+
+  <!-- Signed in, but the company's registration fee is not accepted yet -->
+  <main id="pay" class="auth" hidden>
+    <div class="login-rings" aria-hidden="true"></div>
+    <section class="auth-card pay-card">
+      <div class="pay-top">
+        <img id="pay-logo" class="org-logo" alt="" hidden>
+        <div><div class="pay-org" id="pay-org"></div><div class="muted">Registration payment</div></div>
+        <button class="icon-btn" id="pay-sign-out" type="button" aria-label="Sign out" title="Sign out"><i class="fa-solid fa-right-from-bracket"></i></button>
+      </div>
+      <div id="pay-body"></div>
     </section>
   </main>
 
@@ -71,6 +91,8 @@
       </div>
 
       <button class="hamburger" id="menu-open" type="button" aria-label="Open menu" aria-controls="sidebar"><i class="fa-solid fa-bars"></i></button>
+
+      <a class="hdr-logo" id="hdr-logo" href="#/dashboard" hidden><img alt=""></a>
 
       <a class="hdr-brand" href="#/dashboard" aria-label="ContextBasedRAG: dashboard">
         <span class="wordmark">ContextBasedRAG</span>
@@ -94,7 +116,7 @@
           <kbd>Ctrl K</kbd>
         </form>
         <a class="hdr-field hdr-chip" href="#/dashboard" title="Open the dashboard of this factory">
-          <i class="fa-solid fa-folder-open"></i>
+          <i class="fa-solid fa-folder-open" id="chip-icon"></i><img class="chip-logo" id="chip-logo" alt="" hidden>
           <span class="chip-label">Factory</span>
           <b id="org-name"></b>
           <i class="fa-solid fa-arrow-right chip-arrow"></i>

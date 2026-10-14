@@ -41,3 +41,18 @@ services:
         value: Asia/Kolkata
       - key: ALLOW_SELF_APPROVAL
         value: "false"
+      - key: REGISTRATION_FEE
+        value: 2999
+      - key: UPI_ID
+        sync: false
+      - key: UPI_PAYEE_NAME
+        sync: false
+      - key: PLATFORM_OWNER_EMAIL
+        sync: false
+      # Gmail app password: typed into the Render dashboard only. Render may block outgoing SMTP; the log says so
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: APP_BASE_URL
+        sync: false

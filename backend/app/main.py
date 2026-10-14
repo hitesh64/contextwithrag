@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pymongo.errors import PyMongoError
 
-from .api import assets, audit, auth, breakdowns, chat, conflicts, documents, work_orders
+from .api import assets, audit, auth, billing, breakdowns, chat, conflicts, documents, organization, work_orders
 from .core.config import settings
 from .core.database import documents as document_records, init_db
 from .services import audit_service, ingestion, retrieval
@@ -89,7 +89,7 @@ def health():
 
 
 api = APIRouter(prefix="/api/v1")
-for module in (auth, assets, documents, chat, conflicts, breakdowns, work_orders, audit):
+for module in (auth, organization, billing, assets, documents, chat, conflicts, breakdowns, work_orders, audit):
     api.include_router(module.router)
 app.include_router(api)
 

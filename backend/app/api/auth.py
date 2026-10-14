@@ -5,12 +5,13 @@ from pymongo.errors import DuplicateKeyError
 from ..core.config import settings
 from ..core.database import organizations, users
 from ..core.security import (
-    PERMISSIONS, ROLES, create_access_token, get_current_user, hash_password, permissions_of, require_role,
-    revoke_token, revoke_user_tokens, role_permissions, verify_password, with_implied,
+    PERMISSIONS, ROLES, create_access_token, get_signed_in_user, hash_password, is_platform_owner, permissions_of,
+    require_role, revoke_token, revoke_user_tokens, role_permissions, verify_password, with_implied,
 )
 from ..core.utils import RateLimiter, clean, now, oid, paginate
 from ..schemas import LoginIn, RegisterIn, UserCreate, UserUpdate
 from ..services import audit_service
+from .organization import logo_url
 
 router = APIRouter(tags=["auth"])
 login_limiter = RateLimiter(settings.LOGIN_RATE_PER_MINUTE)
@@ -38,8 +39,12 @@ def _chosen_permissions(role: str, keys: list[str]) -> list[str]:
 
 def _user_out(user: dict) -> dict:
     out = _with_access(clean(user))
-    org = organizations.find_one({"_id": oid(user["organization_id"])})
+    org = organizations.find_one({"_id": oid(user["organization_id"])}, {"name": 1, "status": 1, "logo.updated_at": 1})
     out["organization_name"] = org["name"] if org else ""
+    # Until the registration fee is accepted the browser shows only the payment page
+    out["organization_status"] = org.get("status", "active") if org else "active"
+    out["organization_logo_url"] = logo_url(org) if org else None
+    out["platform_owner"] = is_platform_owner(user)
     return out
 
 
@@ -70,7 +75,11 @@ def register(body: RegisterIn, request: Request):
     login_limiter.check(f"register:{request.client.host if request.client else ''}")
     if users.find_one({"email": body.email.lower()}):
         raise HTTPException(status.HTTP_409_CONFLICT, "This email is already registered.")
-    org_id = organizations.insert_one({"name": body.organization_name, "created_at": now()}).inserted_id
+    # Active only after the registration fee is paid; the platform owner's own company never pays
+    paid = settings.REGISTRATION_FEE <= 0 or body.email.lower() == settings.PLATFORM_OWNER_EMAIL
+    org_id = organizations.insert_one({
+        "name": body.organization_name, "status": "active" if paid else "pending_payment", "created_at": now(),
+    }).inserted_id
     try:
         user = _new_user(str(org_id), body.name, body.email, body.password, "admin")
     except HTTPException:
@@ -97,7 +106,7 @@ def logout(_: None = Depends(revoke_token)):
 
 
 @router.get("/auth/me")
-def me(user: dict = Depends(get_current_user)):
+def me(user: dict = Depends(get_signed_in_user)):
     return _user_out(user)
 
 

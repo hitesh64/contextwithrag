@@ -154,3 +154,9 @@ class ConflictResolveIn(Body):
     decision: Literal["governs", "outdated", "both_apply", "false_alarm"]
     document_id: str | None = Field(None, max_length=40, description="The document the decision is about (governs / outdated)")
     note: str = Field(min_length=10, max_length=1000)
+
+
+class PaymentDecisionIn(Body):
+    """The platform owner's decision about a registration payment, after checking the bank statement."""
+    decision: Literal["accept", "reject"]
+    note: str = Field("", max_length=300)

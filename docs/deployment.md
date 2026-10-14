@@ -67,6 +67,27 @@ The service deploys from `main` automatically. The new application is on `factor
    Then restart the service from the dashboard and ask again after a minute: the documents must
    still be "ready" and both answers must come back. That restart is the real test of this page.
 
+## Registration fee, mail and logo
+
+A new company pays `REGISTRATION_FEE` (₹2999) by UPI before it can use the application. Set in the
+Render dashboard:
+
+- `UPI_ID` and `UPI_PAYEE_NAME`: where the money goes; the QR code is made from them.
+- `PLATFORM_OWNER_EMAIL`: the account that sees the **Payments** page and reviews the payments the AI
+  check could not confirm. That account's own company never pays.
+- `SMTP_USER` (the Gmail address) and `SMTP_PASSWORD` (a Gmail **app password**), and `APP_BASE_URL`
+  (`https://<address>`), for the "your company is registered" mail.
+
+The check reads the payer's screenshot; it cannot see the bank account. A well-edited screenshot can
+pass it, so compare every accepted UTR with the bank statement; rejecting an accepted payment on the
+Payments page locks that company again. Each proof costs one Gemini call (free key: ~20 a day).
+
+Render's support has said outgoing SMTP ports are blocked on its services. If the log shows
+`Mail to … could not be sent`, mail works only from a machine that allows SMTP, or through an
+HTTP mail API (not built yet). Registration and payment keep working without mail.
+
+Companies created before the fee existed have no status and stay active.
+
 ## Going back
 
 Revert the merge on `main` and push; set the start command back to

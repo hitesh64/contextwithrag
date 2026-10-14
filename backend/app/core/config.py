@@ -63,6 +63,23 @@ class Settings:
     # Whether the person who wrote a work order may also approve it
     ALLOW_SELF_APPROVAL = _flag("ALLOW_SELF_APPROVAL")
 
+    # Registration fee of a new company, in whole rupees, paid by UPI to UPI_ID. 0: no payment, a new company is
+    # active at once. The payment is checked from the payer's screenshot (see services/payment_check.py).
+    REGISTRATION_FEE = int(os.getenv("REGISTRATION_FEE", "2999"))
+    UPI_ID = os.getenv("UPI_ID", "").strip()
+    UPI_PAYEE_NAME = os.getenv("UPI_PAYEE_NAME", "ContextBasedRAG").strip()
+    # Who reviews the payments the check could not decide. Signs in like any other user; not shown to companies.
+    PLATFORM_OWNER_EMAIL = os.getenv("PLATFORM_OWNER_EMAIL", "").strip().lower()
+
+    # Outgoing mail (Gmail: smtp.gmail.com, 587, the account address and an app password). Empty SMTP_USER: no mail.
+    SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USER = os.getenv("SMTP_USER", "").strip()
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "").strip()
+    MAIL_FROM = os.getenv("MAIL_FROM", "").strip() or SMTP_USER
+    # Address of this application, for the sign-in link in mails
+    APP_BASE_URL = os.getenv("APP_BASE_URL", "http://127.0.0.1:8000").strip().rstrip("/")
+
     # Browser origins allowed to call the API. Empty: only the frontend served by this server.
     CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
 

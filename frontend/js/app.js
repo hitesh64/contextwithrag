@@ -10,6 +10,7 @@ const STATUS_STYLE = {
   queued: 'info', processing: 'info', in_progress: 'info', draft: 'info',
   pending_approval: 'warn', open: 'warn', under_maintenance: 'warn', high: 'warn', denied: 'warn',
   failed: 'bad', rejected: 'bad', critical: 'bad', conflict: 'bad', needs_review: 'warn', cancelled: '', archived: '', inactive: '',
+  accepted: 'ok', pending_payment: 'warn',
 };
 const MOVE_LABEL = {
   pending_approval: 'Submit for approval', approved: 'Approve', rejected: 'Reject', draft: 'Back to draft',
@@ -20,6 +21,7 @@ let token = sessionStorage.getItem('token');
 let me = null;
 let chart = null;
 let pollTimer = null;
+let payTimer = null;
 const chatLog = [];
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -36,7 +38,7 @@ const when = value => (value ? new Date(value).toLocaleString([], { dateStyle: '
 const day = value => (value ? new Date(value).toLocaleDateString([], { dateStyle: 'medium' }) : '—');
 const shown = value => (value === null || value === undefined || value === '' ? '<span class="muted">not recorded</span>' : esc(value));
 // The server sends what this user may do; it enforces the same list itself, so this only decides what is drawn
-const can = permission => Boolean(me) && me.permissions.includes(permission);
+const can = permission => Boolean(me) && (permission === 'platform.owner' ? me.platform_owner : me.permissions.includes(permission));
 
 function toast(message, bad = false) {
   const el = document.createElement('div');
@@ -68,6 +70,12 @@ async function api(path, { method = 'GET', body, form, params, raw = false } = {
   if (response.status === 401 && token) {
     signOut();
     throw new Error('Your login has expired. Sign in again.');
+  }
+  if (response.status === 402 && token && me) {
+    // The company's registration payment was withdrawn while this page was open
+    me.organization_status = 'pending_payment';
+    showPayment();
+    throw new Error('The registration payment of your company is not confirmed.');
   }
   if (!response.ok) {
     let message = response.statusText || 'Request failed';
@@ -244,6 +252,7 @@ const NAV = [
   ['breakdowns', 'Breakdowns', 'breakdowns.view', 'triangle-exclamation', 'Maintenance'], ['work-orders', 'Work orders', 'work_orders.view', 'clipboard-list', 'Maintenance'],
   ['conflicts', 'Conflicts', 'conflicts.view', 'code-compare', 'Maintenance'],
   ['audit', 'Audit history', 'audit.view', 'clock-rotate-left', 'Administration'], ['users', 'Users', 'users.manage', 'users', 'Administration'],
+  ['payments', 'Payments', 'platform.owner', 'indian-rupee-sign', 'Platform'],
 ];
 const fa = name => `<i class="fa-solid fa-${name}"></i>`;
 
@@ -269,6 +278,8 @@ pages.dashboard = async (_, query) => {
   navBadges(d);
   const period = `${day(d.period_start)} – ${day(new Date())}`;
   page().innerHTML = `
+    <div class="org-banner">${orgMark('org-banner-logo')}<div><div class="org-banner-name">${esc(me.organization_name)}</div>
+      <div class="muted">Factory dashboard · ${esc(ROLE_NAMES[me.role])}</div></div></div>
     <div class="page-head"><h1>Dashboard</h1>
       <label>Period <select id="days">${[['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last 12 months']].map(([v, t]) => `<option value="${v}" ${v === days ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div>
     <div class="grid">
@@ -760,7 +771,7 @@ pages.audit = async (_, query) => {
   page().innerHTML = `
     <div class="page-head"><h1>Audit history</h1></div>
     <form class="filters" id="filters">
-      <label>Record type<select name="resource_type">${['', 'work_order', 'document', 'conflict', 'asset', 'breakdown', 'user', 'organization'].map(v => `<option value="${v}" ${v === params.resource_type ? 'selected' : ''}>${v ? label(v) : 'All'}</option>`).join('')}</select></label>
+      <label>Record type<select name="resource_type">${['', 'work_order', 'document', 'conflict', 'asset', 'breakdown', 'user', 'organization', 'payment'].map(v => `<option value="${v}" ${v === params.resource_type ? 'selected' : ''}>${v ? label(v) : 'All'}</option>`).join('')}</select></label>
       <label>Result<select name="result">${['', 'success', 'denied', 'failed'].map(v => `<option value="${v}" ${v === params.result ? 'selected' : ''}>${v ? label(v) : 'All'}</option>`).join('')}</select></label>
       <button class="btn" type="submit">Apply</button></form>
     ${table([
@@ -780,6 +791,11 @@ pages.users = async () => {
     ? `<b>Custom</b> · ${u.permissions.length} of ${catalogue.permissions.length}` : 'Standard for the role';
   page().innerHTML = `
     <div class="page-head"><h1>Users</h1><button class="btn primary" data-action="add-user">Add user</button></div>
+    <div class="card logo-card"><h2>${fa('image')}Company logo</h2>
+      <div class="logo-row">${orgMark('logo-card-mark')}
+        <div><p class="hint">Shown in the header and on the dashboard for everyone in ${esc(me.organization_name)}. PNG, JPG or WebP, up to 512 KB.</p>
+        <div class="actions"><button class="btn small" data-action="logo-change">${me.organization_logo_url ? 'Change logo' : 'Upload logo'}</button>
+          ${me.organization_logo_url ? '<button class="btn small danger" data-action="logo-remove">Remove</button>' : ''}</div></div></div></div>
     <div class="notice">A role gives a standard set of access. Viewer: read and ask. Technician: also report breakdowns, draft work orders and carry out approved ones.
       Maintenance manager: also manage assets and documents, import records, approve work orders and close conflicts. Administrator: everything, manages users, and may approve a work order they wrote themselves.
       With <b>Access</b> you choose for one user which sections are visible and what that user may do, for example who may approve work orders.</div>
@@ -793,6 +809,30 @@ pages.users = async () => {
           <button class="btn small ${u.is_active ? 'danger' : ''}" data-action="toggle-user" data-id="${esc(u.id)}" data-active="${u.is_active}">${u.is_active ? 'Deactivate' : 'Activate'}</button></div>` },
     ], data.items)}`;
   const picked = el => data.items.find(u => u.id === el.dataset.id);
+  actions['logo-change'] = async () => {
+    const result = await formDialog({
+      title: 'Company logo', submitLabel: 'Upload',
+      fields: [{ name: 'file', label: 'Picture', type: 'file', accept: 'image/png,image/jpeg,image/webp', required: true, hint: 'PNG, JPG or WebP, up to 512 KB.' }],
+      submit: async values => {
+        const form = new FormData();
+        form.append('file', values.file);
+        return api('/organization/logo', { method: 'PUT', form });
+      },
+    });
+    if (!result) return;
+    me.organization_logo_url = result.logo_url;
+    showLogos();
+    toast('Logo saved');
+    route();
+  };
+  actions['logo-remove'] = async () => {
+    if (!await confirmDialog('Remove the company logo?', 'The header and dashboard show the first letter of the company name instead.', 'Remove', 'danger')) return;
+    if (await attempt(() => api('/organization/logo', { method: 'DELETE' }).then(() => true), 'Logo removed')) {
+      me.organization_logo_url = null;
+      showLogos();
+      route();
+    }
+  };
   actions['add-user'] = async () => {
     if (await formDialog({
       title: 'Add user', submitLabel: 'Add user',
@@ -891,10 +931,193 @@ document.addEventListener('click', event => {
 });
 window.addEventListener('hashchange', () => { if (me) route(); });
 
-function showApp() {
+// ---------- registration payment and company logo ----------
+
+const rupees = amount => `₹${Number(amount).toLocaleString('en-IN')}`;
+const CHECK_MARK = { true: ['ok', 'circle-check'], false: ['bad', 'circle-xmark'], null: ['warn', 'circle-question'] };
+
+/** The company logo, or the first letter of its name when it has none. */
+function orgMark(className) {
+  return me.organization_logo_url
+    ? `<img class="${className}" src="${esc(me.organization_logo_url)}" alt="${esc(me.organization_name)} logo">`
+    : `<span class="${className} org-initial" aria-hidden="true">${esc(me.organization_name.trim().charAt(0).toUpperCase())}</span>`;
+}
+
+function setImage(img, url) {
+  img.hidden = !url;
+  if (url) img.src = url;
+  else img.removeAttribute('src');
+}
+
+function showLogos() {
+  const url = me.organization_logo_url;
+  $('#hdr-logo').hidden = !url;
+  setImage($('#hdr-logo img'), url);
+  $('#hdr-logo img').alt = url ? `${me.organization_name} logo` : '';
+  $('#chip-icon').hidden = Boolean(url);
+  setImage($('#chip-logo'), url);
+  setImage($('#pay-logo'), url);
+}
+
+function checkList(checks) {
+  return `<ul class="checks-list">${checks.map(c => {
+    const [tone, icon] = CHECK_MARK[c.ok];
+    return `<li class="${tone}">${fa(icon)}<span><b>${esc(c.label)}</b>${c.detail ? `<span class="muted"> · ${esc(c.detail)}</span>` : ''}</span></li>`;
+  }).join('')}</ul>`;
+}
+
+const PAYMENT_TEXT = {
+  accepted: 'Payment accepted. Your company is active.',
+  rejected: 'This proof was not accepted. Check the reasons, then send the correct UTR and screenshot.',
+  needs_review: 'The AI check could not confirm everything. The platform owner will check the UTR in the bank account; you will get an email.',
+};
+
+async function showPayment() {
+  clearTimeout(payTimer);
   $('#auth').hidden = true;
+  $('#app').hidden = true;
+  $('#pay').hidden = false;
+  $('#pay-org').textContent = me.organization_name;
+  showLogos();
+  await drawPayment();
+}
+
+async function drawPayment(latest) {
+  clearTimeout(payTimer);
+  if (!me) return;
+  const body = $('#pay-body');
+  let b;
+  try {
+    b = await api('/billing');
+  } catch (error) {
+    body.innerHTML = `<p class="error">${esc(error.message)}</p><button class="btn" id="pay-retry">Try again</button>`;
+    $('#pay-retry').onclick = () => drawPayment();
+    return;
+  }
+  if (b.status === 'active') {
+    me = await api('/auth/me');
+    toast('Payment accepted. Your company is registered.');
+    showApp();
+    return;
+  }
+  const last = latest || b.payments[0];
+  const waiting = b.payments[0]?.status === 'needs_review';
+  body.innerHTML = `
+    <h1>Pay ${rupees(b.fee)} to activate your company</h1>
+    <p class="muted">Scan with any UPI app: Google Pay, PhonePe, Paytm or BHIM. The amount is filled in for you.</p>
+    ${b.configured ? `
+      <div class="qr" role="img" aria-label="UPI QR code for ${esc(rupees(b.fee))}">${b.qr_svg}</div>
+      <div class="pay-facts">
+        <div><span>Amount</span><b>${rupees(b.fee)}</b></div>
+        <div><span>UPI ID</span><b>${esc(b.upi_id)}</b></div>
+        <div><span>Reference</span><b>${esc(b.reference)}</b></div>
+      </div>
+      <a class="btn small upi-app" href="${esc(b.upi_uri)}">${fa('mobile-screen-button')}Open UPI app (on a phone)</a>`
+      : '<div class="notice">Payments are not set up on this server yet. Contact the platform owner.</div>'}
+    ${last ? `<div class="pay-result">
+      <div class="pay-result-head">${badge(last.status)}<span class="muted">UTR ${esc(last.utr)} · ${when(last.created_at)}</span></div>
+      <p>${esc(PAYMENT_TEXT[last.status] || '')}</p>${checkList(last.checks)}</div>` : ''}
+    ${waiting ? `<p class="hint live">${fa('rotate')}Waiting for review. This page checks again by itself every 15 seconds.</p>`
+      : b.configured ? `<form id="proof-form" class="proof-form">
+      <h2>After paying, verify your payment</h2>
+      <label>UTR / UPI transaction ID <input name="utr" required inputmode="numeric" pattern="[0-9 ]{12,15}" maxlength="15" placeholder="12-digit number from your UPI app" autocomplete="off"></label>
+      <label>Payment screenshot <input name="screenshot" type="file" accept="image/png,image/jpeg,image/webp" required>
+        <span class="hint">The success screen of the payment, showing amount, UTR, receiver and date. Up to 2 MB.</span></label>
+      <button class="btn primary" type="submit">${fa('shield-halved')}Verify payment</button>
+    </form>` : ''}`;
+  if (waiting) payTimer = setTimeout(() => drawPayment(), 15000);
+  const form = $('#proof-form');
+  if (!form) return;
+  form.onsubmit = async event => {
+    event.preventDefault();
+    const button = $('button[type=submit]', form);
+    button.disabled = true;
+    button.innerHTML = `${fa('spinner fa-spin')}AI is checking your payment…`;
+    try {
+      const result = await api('/billing/proof', { method: 'POST', form: new FormData(form) });
+      if (result.organization_status === 'active') {
+        me = await api('/auth/me');
+        toast('Payment verified. Your company is registered; a confirmation email is on its way.');
+        showApp();
+        return;
+      }
+      await drawPayment(result.payment);
+    } catch (error) {
+      toast(error.message, true);
+      button.disabled = false;
+      button.innerHTML = `${fa('shield-halved')}Verify payment`;
+    }
+  };
+}
+
+$('#pay-sign-out').onclick = async () => {
+  await api('/auth/logout', { method: 'POST' }).catch(() => {});
+  signOut();
+};
+
+pages.payments = async (_, query) => {
+  const params = { status: query.has('status') ? query.get('status') : 'needs_review', page: query.get('page') || 1 };
+  const data = await api('/platform/payments', { params });
+  const summary = checks => {
+    const open = checks.filter(c => c.ok !== true);
+    return open.length ? checkList(open) : `<span class="muted">All ${checks.length} checks passed</span>`;
+  };
+  page().innerHTML = `
+    <div class="page-head"><h1>Payments</h1></div>
+    <div class="notice">Registration fees of new companies. The AI check reads the screenshot; it cannot see your bank account.
+      Before you accept a payment, find its UTR and amount in your bank or UPI app. Rejecting an accepted payment locks that company again.</div>
+    <form class="filters" id="filters"><label>Status<select name="status">${[['needs_review', 'Needs review'], ['accepted', 'Accepted'], ['rejected', 'Rejected'], ['', 'All']]
+      .map(([v, t]) => `<option value="${v}" ${v === params.status ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+      <button class="btn" type="submit">Apply</button></form>
+    ${table([
+      { title: 'When', cell: p => when(p.created_at) },
+      { title: 'Company', cell: p => `${esc(p.organization_name)}<div class="muted">${esc(p.submitted_by_email)}</div>` },
+      { title: 'UTR', cell: p => `<code>${esc(p.utr)}</code>` },
+      { title: 'Amount', num: true, cell: p => rupees(p.amount) },
+      { title: 'Checks', cell: p => summary(p.checks) },
+      { title: 'Status', cell: p => badge(p.status) + (p.decided_by ? `<div class="muted">${esc(p.decided_by)}</div>` : '') },
+      { title: '', cell: p => `<div class="actions">
+          <button class="btn small" data-action="pay-shot" data-id="${esc(p.id)}">Screenshot</button>
+          ${p.status !== 'accepted' ? `<button class="btn small" data-action="pay-accept" data-id="${esc(p.id)}">Accept</button>` : ''}
+          ${p.status !== 'rejected' ? `<button class="btn small danger" data-action="pay-reject" data-id="${esc(p.id)}">Reject</button>` : ''}</div>` },
+    ], data.items, { empty: 'No payments here.' })}${pager(data, 'pay-page')}`;
+  const picked = el => data.items.find(p => p.id === el.dataset.id);
+  $('#filters').onsubmit = event => { event.preventDefault(); location.hash = '#/payments?' + new URLSearchParams(new FormData(event.target)); };
+  actions['pay-page'] = el => { query.set('page', el.dataset.page); location.hash = '#/payments?' + query; };
+  actions['pay-shot'] = el => attempt(async () => {
+    const blob = await (await api(`/platform/payments/${el.dataset.id}/screenshot`, { raw: true })).blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  });
+  actions['pay-accept'] = async el => {
+    const p = picked(el);
+    if (!await confirmDialog('Accept this payment?', `Only if UTR ${p.utr} for ${rupees(p.amount)} is in your bank account. ${p.organization_name} becomes active and gets the registration email.`, 'Accept payment', 'warn')) return;
+    if (await attempt(() => api(`/platform/payments/${p.id}/decision`, { method: 'POST', body: { decision: 'accept' } }), 'Payment accepted')) route();
+  };
+  actions['pay-reject'] = async el => {
+    const p = picked(el);
+    const done = await formDialog({
+      title: 'Reject this payment?', submitLabel: 'Reject', tone: 'danger',
+      note: `${p.organization_name} gets an email and can send a new proof.${p.status === 'accepted' ? ' The company loses access until it pays.' : ''}`,
+      fields: [{ name: 'note', label: 'Reason (sent to the company)', type: 'textarea', rows: 2, maxlength: 300 }],
+      submit: values => api(`/platform/payments/${p.id}/decision`, { method: 'POST', body: { decision: 'reject', note: values.note } }),
+    });
+    if (done) { toast('Payment rejected'); route(); }
+  };
+};
+
+function showApp() {
+  if (me.organization_status !== 'active') {
+    showPayment();
+    return;
+  }
+  clearTimeout(payTimer);
+  $('#auth').hidden = true;
+  $('#pay').hidden = true;
   $('#app').hidden = false;
   $('#org-name').textContent = me.organization_name;
+  showLogos();
   $('#who-name').textContent = me.name;
   $('#who-role').textContent = ROLE_NAMES[me.role] + (me.custom_permissions ? ' · custom' : '');
   $('#who-avatar').textContent = me.name.trim().charAt(0);
@@ -916,7 +1139,9 @@ function signOut() {
   me = null;
   chatLog.length = 0;
   sessionStorage.removeItem('token');
+  clearTimeout(payTimer);
   $('#app').hidden = true;
+  $('#pay').hidden = true;
   $('#auth').hidden = false;
   showSwipe(true);
 }
@@ -955,9 +1180,34 @@ function authForm(selector, handler) {
 }
 authForm('#login-form', values => signIn(values.email, values.password));
 authForm('#register-form', async values => {
-  await api('/auth/register', { method: 'POST', body: values });
-  await signIn(values.email, values.password);
+  const { logo, ...account } = values;
+  const picture = logo && logo.size ? logo : null;
+  if (picture && picture.size > 512 * 1024) throw new Error('The logo is larger than 512 KB. Choose a smaller picture.');
+  await api('/auth/register', { method: 'POST', body: account });
+  const result = await api('/auth/login', { method: 'POST', body: { email: account.email, password: account.password } });
+  token = result.access_token;
+  sessionStorage.setItem('token', token);
+  if (picture) {
+    // The company exists already: a logo the server refuses is only reported, and can be added later under Users
+    const form = new FormData();
+    form.append('file', picture);
+    await attempt(() => api('/organization/logo', { method: 'PUT', form }));
+  }
+  me = await api('/auth/me');
+  showApp();
 });
+
+// Registration form: preview of the chosen logo, and the fee that follows
+$('#register-logo').onchange = event => {
+  const file = event.target.files[0];
+  const preview = $('#register-logo-preview');
+  if (preview.src) URL.revokeObjectURL(preview.src);
+  setImage(preview, file ? URL.createObjectURL(file) : null);
+};
+$('#register-form').addEventListener('reset', () => setImage($('#register-logo-preview'), null));
+api('/billing/fee').then(({ fee }) => {
+  if (fee > 0) $('#register-fee').textContent = `A one-time registration fee of ${rupees(fee)} is paid by UPI in the next step.`;
+}).catch(() => {});
 
 $('#sign-out').onclick = async () => {
   await api('/auth/logout', { method: 'POST' }).catch(() => {});

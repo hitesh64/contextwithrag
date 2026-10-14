@@ -16,7 +16,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .config import settings
-from .database import login_sessions, users
+from .database import login_sessions, organizations, users
 from .utils import now
 
 bearer = HTTPBearer(auto_error=False)
@@ -61,7 +61,8 @@ def revoke_user_tokens(user_id: str) -> None:
     login_sessions.delete_many({"user_id": user_id})
 
 
-def get_current_user(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
+def get_signed_in_user(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
+    """The logged-in user, whether or not the company has paid. Only for signing out, /auth/me and the payment."""
     unauthorized = HTTPException(
         status.HTTP_401_UNAUTHORIZED, "Invalid or expired login", headers={"WWW-Authenticate": "Bearer"}
     )
@@ -76,6 +77,29 @@ def get_current_user(creds: HTTPAuthorizationCredentials | None = Depends(bearer
     if not user.get("is_active", True):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Account is deactivated")
     user["id"] = str(user["_id"])
+    return user
+
+
+def organization_status(organization_id: str) -> str:
+    """'pending_payment', 'active' or 'rejected'. Companies created before the fee existed have no status: active."""
+    org = organizations.find_one({"_id": ObjectId(organization_id)}, {"status": 1})
+    return (org or {}).get("status", "active")
+
+
+def get_current_user(user: dict = Depends(get_signed_in_user)) -> dict:
+    """The logged-in user of a company that is active, i.e. whose registration fee was accepted."""
+    if organization_status(user["organization_id"]) != "active":
+        raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, "Your company's registration payment is not confirmed yet.")
+    return user
+
+
+def is_platform_owner(user: dict) -> bool:
+    return bool(settings.PLATFORM_OWNER_EMAIL) and user["email"].lower() == settings.PLATFORM_OWNER_EMAIL
+
+
+def require_platform_owner(user: dict = Depends(get_signed_in_user)) -> dict:
+    if not is_platform_owner(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the owner of this platform may do this.")
     return user
 
 

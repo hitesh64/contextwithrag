@@ -35,7 +35,7 @@ def _require_key() -> None:
         raise LLMError("GOOGLE_API_KEY is not configured. Add it to the .env file and restart the server.")
 
 
-def _generate(model: str, prompt: str, system: str, json_output: bool) -> str:
+def _generate(model: str, contents, system: str, json_output: bool) -> str:
     config = types.GenerateContentConfig(
         system_instruction=system,
         temperature=0.1,
@@ -44,7 +44,7 @@ def _generate(model: str, prompt: str, system: str, json_output: bool) -> str:
     # Gemini occasionally answers 503 "high demand"; retry a couple of times before giving up
     for attempt in range(3):
         try:
-            response = _client().models.generate_content(model=model, contents=prompt, config=config)
+            response = _client().models.generate_content(model=model, contents=contents, config=config)
             break
         except errors.ServerError:
             if attempt == 2:
@@ -55,15 +55,15 @@ def _generate(model: str, prompt: str, system: str, json_output: bool) -> str:
     return response.text
 
 
-def generate(prompt: str, system: str, json_output: bool = False) -> str:
+def _generate_with_backup(contents, system: str, json_output: bool) -> str:
     _require_key()
     try:
         try:
-            return _generate(settings.GEMINI_MODEL, prompt, system, json_output)
+            return _generate(settings.GEMINI_MODEL, contents, system, json_output)
         except errors.ClientError as e:
             if e.code == 429 and settings.GEMINI_BACKUP_MODEL not in ("", settings.GEMINI_MODEL):
                 log.warning("Gemini refused %s (429), trying %s: %s", settings.GEMINI_MODEL, settings.GEMINI_BACKUP_MODEL, e.message)
-                return _generate(settings.GEMINI_BACKUP_MODEL, prompt, system, json_output)
+                return _generate(settings.GEMINI_BACKUP_MODEL, contents, system, json_output)
             raise
     except errors.APIError as e:
         if e.code == 429:
@@ -71,6 +71,15 @@ def generate(prompt: str, system: str, json_output: bool = False) -> str:
             log.warning("Gemini quota refusal (429): %s", e.message)
             raise QuotaError("The request quota of the Gemini API key is used up. Try again later.") from e
         raise LLMError(f"Gemini API error ({e.code}): {e.message}") from e
+
+
+def generate(prompt: str, system: str, json_output: bool = False) -> str:
+    return _generate_with_backup(prompt, system, json_output)
+
+
+def generate_with_image(prompt: str, system: str, image: bytes, mime_type: str) -> str:
+    """A JSON answer about one image (a payment screenshot), read together with the prompt."""
+    return _generate_with_backup([types.Part.from_bytes(data=image, mime_type=mime_type), prompt], system, True)
 
 
 def _embed_batch(texts: list[str], task: str) -> list[list[float]]:

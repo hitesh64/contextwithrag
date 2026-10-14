@@ -2,7 +2,8 @@
 
     python -m backend.scripts.seed_demo [server URL, default http://127.0.0.1:8000]
 
-The server must be running. Indexing uses embedding calls only, no text-generation quota.
+The server must be running, on the same database as MONGO_URI in .env (the demo factory is marked
+as paid there directly). Indexing uses embedding calls only, no text-generation quota.
 The password of the four demo users is read from DEMO_PASSWORD in .env. The data is invented
 sample data: do not show it to anyone as real factory records.
 """
@@ -10,8 +11,10 @@ import os
 import sys
 
 import httpx
+from bson import ObjectId
 
 from backend.app.core import config  # noqa: F401  (loads .env)
+from backend.app.core.database import organizations
 from backend.scripts import sample_loader
 
 API = "/api/v1"
@@ -37,6 +40,8 @@ def main() -> None:
             sys.exit(f"The demo factory already exists (sign in as {admin_email}).")
         if created.status_code != 201:
             sys.exit(f"Could not create the demo factory: {created.text}")
+        # The demo factory pays no registration fee
+        organizations.update_one({"_id": ObjectId(created.json()["organization_id"])}, {"$set": {"status": "active"}})
         token = client.post(f"{API}/auth/login", json={"email": admin_email, "password": password}).json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
         for name, prefix, role in TEAM:

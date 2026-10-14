@@ -25,6 +25,8 @@ conflicts = db["conflicts"]
 # Original uploaded files, only when FILE_STORE=database
 stored_files = db["stored_files"]
 counters = db["counters"]
+# Registration fee payments: one record per submitted proof (UTR + screenshot)
+payments = db["payments"]
 
 
 def init_db() -> None:
@@ -44,6 +46,12 @@ def init_db() -> None:
     chat_logs.create_index([("organization_id", ASCENDING), ("created_at", DESCENDING)])
     conflicts.create_index([("organization_id", ASCENDING), ("fingerprint", ASCENDING)], unique=True)
     conflicts.create_index([("organization_id", ASCENDING), ("status", ASCENDING), ("last_seen_at", DESCENDING)])
+    payments.create_index([("organization_id", ASCENDING), ("created_at", DESCENDING)])
+    payments.create_index([("status", ASCENDING), ("created_at", DESCENDING)])
+    payments.create_index("utr")
+    payments.create_index("screenshot_hash")
+    # Set only on an accepted payment: one bank transaction can activate one company, never two
+    payments.create_index("accepted_utr", unique=True, sparse=True)
 
 
 def next_number(organization_id: str, kind: str) -> int:

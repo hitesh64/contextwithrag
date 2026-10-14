@@ -636,6 +636,70 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
 @keyframes rings { from { opacity: .7; } to { opacity: 1; } }
 @keyframes nudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
 
+/* ───────── Company logo ───────── */
+.hdr-logo {
+  margin-left: 26px; flex: none; height: 62px; max-width: 150px; padding: 6px 10px;
+  display: grid; place-items: center; background: #fff; border-radius: 12px;
+  border: 1px solid rgba(99, 102, 241, .18); box-shadow: 0 6px 16px -10px rgba(49, 46, 129, .5);
+  animation: hdr-in .6s cubic-bezier(.2, .8, .2, 1) both;
+}
+.hdr-logo img { max-height: 100%; max-width: 100%; object-fit: contain; display: block; }
+.hdr-logo:not([hidden]) + .hdr-brand { margin-left: 4px; }
+.chip-logo { flex: none; width: 18px; height: 18px; object-fit: contain; border-radius: 4px; }
+.org-initial {
+  display: grid; place-items: center; color: #fff; font-weight: 800;
+  background: linear-gradient(135deg, var(--indigo), var(--violet));
+}
+.org-banner {
+  display: flex; align-items: center; gap: 14px; margin-bottom: 16px; padding: 12px 16px;
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: var(--shadow-card);
+}
+.org-banner-logo { flex: none; width: 56px; height: 56px; border-radius: 12px; object-fit: contain; font-size: 1.6rem; }
+.org-banner-name { font-size: 1.15rem; font-weight: 800; color: var(--ink-strong); letter-spacing: -0.02em; }
+.logo-row { display: flex; align-items: center; gap: 16px; }
+.logo-card-mark { flex: none; width: 72px; height: 72px; border-radius: 12px; object-fit: contain; font-size: 2rem; border: 1px solid var(--border); background: #fff; }
+.logo-pick { display: flex; align-items: center; gap: 12px; }
+.logo-pick label { flex: 1 1 auto; }
+.logo-pick img { flex: none; width: 52px; height: 52px; object-fit: contain; border-radius: 10px; border: 1px solid var(--border); background: #fff; }
+
+/* ───────── Registration payment ───────── */
+.pay-card { max-width: 480px; padding: 28px 32px 32px; text-align: left; }
+.pay-card h1 { font-size: 19px; text-align: center; margin: 0 0 6px; }
+.pay-card #pay-body > .muted { text-align: center; font-size: 13px; margin: 0 0 16px; }
+.pay-top { display: flex; align-items: center; gap: 12px; padding-bottom: 16px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
+.pay-top > div { flex: 1 1 auto; min-width: 0; }
+.pay-top .org-logo { flex: none; width: 44px; height: 44px; object-fit: contain; border-radius: 10px; border: 1px solid var(--border); }
+.pay-org { font-weight: 800; color: var(--ink-strong); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pay-top .muted { font-size: 12px; }
+.qr { width: 232px; height: 232px; margin: 0 auto 14px; padding: 8px; background: #fff; border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-card); }
+.qr svg { width: 100%; height: 100%; display: block; }
+.pay-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.pay-facts > div { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--r-btn); padding: 8px 10px; min-width: 0; }
+.pay-facts span { display: block; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-mute); }
+.pay-facts b { display: block; font-size: 13px; color: var(--ink-strong); overflow-wrap: anywhere; }
+.upi-app { display: flex; justify-content: center; margin: 0 auto 6px; width: max-content; }
+.pay-result { margin-top: 16px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-card); background: var(--bg-secondary); }
+.pay-result-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
+.pay-result p { font-size: 13px; margin: 8px 0; }
+.checks-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; font-size: 12.5px; }
+.checks-list li { display: flex; gap: 8px; align-items: baseline; }
+.checks-list li > i { flex: none; }
+.checks-list li.ok > i { color: var(--green); }
+.checks-list li.bad > i { color: var(--red); }
+.checks-list li.warn > i { color: var(--amber); }
+.proof-form { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.proof-form h2 { font-size: 14px; font-weight: 700; margin: 0; color: var(--ink-strong); }
+.proof-form .btn.primary { justify-content: center; }
+.hint.live { text-align: center; margin-top: 14px; }
+.hint.live i { margin-right: 6px; animation: spin 2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 640px) {
+  .pay-card { padding: 22px 16px 24px; }
+  .pay-facts { grid-template-columns: 1fr; }
+  .hdr-logo { margin-left: 0; height: 44px; max-width: 110px; }
+  .logo-row { align-items: flex-start; }
+}
+
 /* ───────── Breakpoints ───────── */
 @media (max-width: 1360px) {
   .hdr-tagline { font-size: 11.5px; }
@@ -652,6 +716,7 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
     border: 1px solid rgba(99, 102, 241, .16); border-radius: 14px;
   }
   .hdr-brand { margin-left: 0; flex: 1 1 auto; align-items: flex-start; min-width: 0; }
+  .hdr-logo { margin-left: 0; height: 44px; max-width: 120px; }
   .wordmark { font-size: 22px; }
   .hdr-show, .hdr-tagline, .drl, .hdr-deco { display: none; }
   .hdr-controls { flex: 1 1 100%; min-width: 0; margin-left: 0; }

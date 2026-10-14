@@ -24,6 +24,7 @@ os.environ.update(
 )
 
 import pytest  # noqa: E402
+from bson import ObjectId  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from backend.app.api import auth, chat  # noqa: E402
@@ -104,6 +105,8 @@ class Factory:
         })
         assert created.status_code == 201, created.text
         self.organization_id = created.json()["organization_id"]
+        # As if the registration fee had been accepted; payment itself is tested in test_billing.py
+        database.organizations.update_one({"_id": ObjectId(self.organization_id)}, {"$set": {"status": "active"}})
         self.admin = self.login(email)
 
     def login(self, email: str) -> dict:
