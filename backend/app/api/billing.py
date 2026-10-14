@@ -16,7 +16,7 @@ from ..core.config import settings
 from ..core.database import organizations, payments, users
 from ..core.security import get_signed_in_user, require_platform_owner
 from ..core.utils import clean, now, oid
-from ..schemas import PaymentVerifyIn
+from ..schemas import PaymentFailedIn, PaymentVerifyIn
 from ..services import audit_service, mailer, razorpay
 
 log = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ def _settle(record: dict, payment: dict) -> bool:
             payment = razorpay.fetch_payment(payment["id"])  # captured a moment ago by the webhook or the browser
     if payment.get("status") != "captured":
         if payment.get("status") == "failed":
-            payments.update_one({"_id": record["_id"]}, {"$set": {"error": payment.get("error_description") or "Payment failed."}})
+            _record_failure(record, payment)
         return False
     paid = payments.update_one(
         {"_id": record["_id"], "status": {"$ne": "paid"}},
@@ -63,16 +63,41 @@ def _settle(record: dict, payment: dict) -> bool:
                   "paid_at": now(), "error": ""}},
     )
     if paid.modified_count:
-        org_id = oid(record["organization_id"])
-        organizations.update_one({"_id": org_id, "status": "pending_payment"},
+        organizations.update_one({"_id": oid(record["organization_id"]), "status": "pending_payment"},
                                  {"$set": {"status": "active", "activated_at": now()}})
-        admin = users.find_one({"organization_id": record["organization_id"], "role": "admin"}, sort=[("created_at", 1)])
+        org, admin = _organization(record["organization_id"]), _admin(record["organization_id"])
+        record = payments.find_one({"_id": record["_id"]})
         if admin:
-            admin["id"] = str(admin["_id"])
             audit_service.record(admin, "payment.paid", "payment", str(record["_id"]), detail=f"Razorpay {payment['id']}")
-            mailer.company_registered(organizations.find_one({"_id": org_id}, {"logo": 0}), admin,
-                                      payments.find_one({"_id": record["_id"]}))
+        mailer.payment_succeeded(org, admin, record)
     return True
+
+
+def _admin(organization_id: str) -> dict | None:
+    """The administrator who registered the company: the one who pays and gets the mails."""
+    admin = users.find_one({"organization_id": organization_id, "role": "admin"}, sort=[("created_at", 1)])
+    if admin:
+        admin["id"] = str(admin["_id"])
+    return admin
+
+
+def _record_failure(record: dict, payment: dict) -> None:
+    """A failed attempt, once per Razorpay payment: shown on the payment page and mailed to the company and the owner.
+
+    The order stays open, so the company can simply pay again."""
+    reason = payment.get("error_description") or "The payment did not go through."
+    added = payments.update_one(
+        {"_id": record["_id"], "status": {"$ne": "paid"}, "failed_payments": {"$ne": payment["id"]}},
+        {"$push": {"failed_payments": payment["id"]},
+         "$set": {"error": reason, "failed_at": now(), "failed_method": payment.get("method", "")}},
+    )
+    if not added.modified_count:
+        return
+    org, admin = _organization(record["organization_id"]), _admin(record["organization_id"])
+    if admin:
+        audit_service.record(admin, "payment.failed", "payment", str(record["_id"]), result="failed",
+                             detail=f"Razorpay {payment['id']}: {reason}")
+    mailer.payment_failed(org, admin, payments.find_one({"_id": record["_id"]}), payment["id"], reason)
 
 
 def _check_open_order(organization_id: str) -> None:
@@ -82,7 +107,8 @@ def _check_open_order(organization_id: str) -> None:
         return
     try:
         for payment in razorpay.order_payments(record["order_id"]):
-            if payment.get("status") in ("authorized", "captured") and _settle(record, payment):
+            # Failed attempts are recorded too: a closed Checkout window never reported them
+            if payment.get("status") in ("authorized", "captured", "failed") and _settle(record, payment):
                 return
     except razorpay.RazorpayError as e:
         log.warning("Could not ask Razorpay about order %s: %s", record["order_id"], e)
@@ -161,16 +187,31 @@ def verify_payment(body: PaymentVerifyIn, user: dict = Depends(get_signed_in_use
     return {"organization_status": _organization(user["organization_id"]).get("status", "active")}
 
 
+@router.post("/billing/failed")
+def report_failure(body: PaymentFailedIn, user: dict = Depends(get_signed_in_user)):
+    """Checkout says a payment failed. Believed only after Razorpay confirms it for this company's order."""
+    try:
+        payment = razorpay.fetch_payment(body.razorpay_payment_id)
+    except razorpay.RazorpayError as e:
+        raise _bad_gateway(e)
+    record = payments.find_one({"organization_id": user["organization_id"], "order_id": payment.get("order_id")})
+    if record is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "This payment does not belong to your company.")
+    _settle(record, payment)
+    return {"organization_status": _organization(user["organization_id"]).get("status", "active"),
+            "error": payments.find_one({"_id": record["_id"]}).get("error", "")}
+
+
 @router.post("/billing/webhook", include_in_schema=False)
 async def webhook(request: Request, x_razorpay_signature: str = Header("")):
-    """payment.captured / order.paid from Razorpay, for a payment whose browser never reported back."""
+    """payment.captured / order.paid / payment.failed from Razorpay, for a browser that never reported back."""
     body = await request.body()
     if not razorpay.valid_webhook_signature(body, x_razorpay_signature):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid signature")
     event = json.loads(body)
     payment = ((event.get("payload") or {}).get("payment") or {}).get("entity") or {}
     record = payments.find_one({"order_id": payment.get("order_id")}) if payment.get("order_id") else None
-    if record and event.get("event") in ("payment.captured", "payment.authorized", "order.paid"):
+    if record and event.get("event") in ("payment.captured", "payment.authorized", "order.paid", "payment.failed"):
         try:
             _settle(record, payment)
         except razorpay.RazorpayError as e:

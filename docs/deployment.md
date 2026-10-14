@@ -82,7 +82,9 @@ application. Set in the Render dashboard:
   page asks Razorpay about the open order when it is opened again.
 - `PLATFORM_OWNER_EMAIL`: the account that sees the **Payments** page. That account's own company never pays.
 - `SMTP_USER` (the Gmail address) and `SMTP_PASSWORD` (a Gmail **app password**), and `APP_BASE_URL`
-  (`https://<address>`), for the "your company is registered" mail.
+  (`https://<address>`), for the payment mails: after each paid or failed payment the company's
+  administrator gets a receipt or a "not completed" mail, and `PLATFORM_OWNER_EMAIL` gets a notice.
+  Test payments say `[TEST]` in the subject.
 
 A company becomes active only when the server has seen the payment at Razorpay: the Checkout signature
 (HMAC with the key secret) and the payment fetched from Razorpay must both be right (captured, the fee,

@@ -143,10 +143,13 @@ def test_paying_activates_the_company(client, gateway, mails):
     assert client.get(f"{API}/assets", headers=headers).status_code == 200
     record = client.get(f"{API}/billing", headers=headers).json()["payments"][0]
     assert record["status"] == "paid" and record["payment_id"] == paid["razorpay_payment_id"] and record["method"] == "upi"
-    assert [m["to"] for m in mails] == ["admin@acme.example.com"] and paid["razorpay_payment_id"] in mails[0]["text"]
+    # A receipt to the company's administrator and a notice to the platform owner, both marked as test payments
+    assert [m["to"] for m in mails] == ["admin@acme.example.com", OWNER]
+    assert all(paid["razorpay_payment_id"] in m["text"] and m["subject"].startswith("[TEST]") for m in mails)
+    assert "is now active" in mails[0]["text"] and "New company paid: acme" in mails[1]["subject"]
 
     assert verify(client, headers, paid).status_code == 200  # reported twice: counted once
-    assert len(mails) == 1
+    assert len(mails) == 2
     assert client.post(f"{API}/billing/order", headers=headers).status_code == 409
 
 
@@ -172,6 +175,49 @@ def test_signature_alone_is_not_enough(client, gateway):
     assert client.get(f"{API}/billing", headers=headers).json()["payments"][0]["error"] == "Payment failed at the bank."
     assert verify(client, headers, gateway.pay(order_id, amount=100)).status_code == 402
     assert status_of(client, headers) == "pending_payment"
+
+
+def test_failed_payment_is_recorded_and_mailed_once(client, gateway, mails):
+    """Checkout reports the failure; the server believes it only after asking Razorpay, and mails both sides once."""
+    headers = register(client, "acme")
+    failed = gateway.pay(order(client, headers)["order_id"], status="failed")
+    response = client.post(f"{API}/billing/failed", headers=headers, json={"razorpay_payment_id": failed["razorpay_payment_id"]})
+    assert response.status_code == 200, response.text
+    assert response.json() == {"organization_status": "pending_payment", "error": "Payment failed at the bank."}
+    assert [m["to"] for m in mails] == ["admin@acme.example.com", OWNER]
+    assert "did not go through" in mails[0]["text"] and "Payment failed: acme" in mails[1]["subject"]
+    assert "Payment failed at the bank." in mails[1]["text"]
+
+    client.post(f"{API}/billing/failed", headers=headers, json={"razorpay_payment_id": failed["razorpay_payment_id"]})
+    client.get(f"{API}/billing", headers=headers)  # the open-order check sees the same failure
+    assert len(mails) == 2
+
+    paid = gateway.pay(order(client, headers)["order_id"])  # trying again on the same order works
+    assert verify(client, headers, paid).status_code == 200
+    assert client.get(f"{API}/billing", headers=headers).json()["payments"][0]["error"] == ""
+
+
+def test_a_success_is_not_reported_as_failed(client, gateway, mails):
+    headers = register(client, "acme")
+    paid = gateway.pay(order(client, headers)["order_id"], status="authorized")
+    client.post(f"{API}/billing/failed", headers=headers, json={"razorpay_payment_id": paid["razorpay_payment_id"]})
+    assert status_of(client, headers) == "active"
+    assert "Payment received" in mails[0]["subject"]
+
+
+def test_failure_seen_only_by_razorpay_is_recorded(client, gateway, mails):
+    """The browser closed after a failed try: the payment page finds the failure at Razorpay."""
+    headers = register(client, "acme")
+    gateway.pay(order(client, headers)["order_id"], status="failed")
+    assert client.get(f"{API}/billing", headers=headers).json()["payments"][0]["error"] == "Payment failed at the bank."
+    assert len(mails) == 2
+
+
+def test_another_companys_failure_is_refused(client, gateway):
+    first, second = register(client, "acme"), register(client, "other")
+    failed = gateway.pay(order(client, first)["order_id"], status="failed")
+    response = client.post(f"{API}/billing/failed", headers=second, json={"razorpay_payment_id": failed["razorpay_payment_id"]})
+    assert response.status_code == 404
 
 
 def test_authorised_payment_is_captured(client, gateway):

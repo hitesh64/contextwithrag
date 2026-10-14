@@ -1002,12 +1002,15 @@ async function drawPayment() {
   body.innerHTML = `
     <h1>Pay ${rupees(b.fee)} to activate your company</h1>
     <p class="muted">Card, UPI, net banking or wallet, through Razorpay. Your company is active as soon as the payment goes through.</p>
-    ${b.test_mode ? `<div class="notice warn">${fa('flask')}<b>Test mode:</b> no real money is charged. In the Razorpay window pick UPI and enter
-      <code>success@razorpay</code> (or <code>failure@razorpay</code> to try a failed payment), or use a
-      <a href="https://razorpay.com/docs/payments/payments/test-card-details/" target="_blank" rel="noopener">Razorpay test card</a>.</div>` : ''}
+    ${b.test_mode ? `<div class="pay-test">
+      <div class="pay-test-head">${fa('flask')}Test payment: no real money</div>
+      <ol><li>Press <b>Pay ${rupees(b.fee)}</b> and choose <b>UPI</b>.</li>
+        <li>Enter the UPI ID <code>success@razorpay</code> and pay.</li></ol>
+      <div class="muted">With net banking, press <b>Success</b> on Razorpay's test bank page.</div></div>` : ''}
     ${b.configured
       ? `<button class="btn primary pay-now" id="pay-now" type="button">${fa('lock')}Pay ${rupees(b.fee)}</button>
-         ${failed ? `<p class="error">Last attempt: ${esc(failed)}</p>` : ''}
+         ${failed ? `<div class="pay-failed">${fa('circle-exclamation')}<div><b>Your last payment did not go through.</b>
+           <span>${esc(failed)}</span><span class="muted">Nothing was charged. Press Pay to try again.</span></div></div>` : ''}
          <p class="hint pay-secure">${fa('shield-halved')}Payments are handled by Razorpay. This application never sees card or bank details.</p>`
       : '<div class="notice">Payments are not set up on this server yet. Contact the platform owner.</div>'}`;
   const button = $('#pay-now');
@@ -1037,7 +1040,12 @@ async function payNow(button) {
       // Closed without paying, or after paying but before reporting back: the server asks Razorpay again
       modal: { ondismiss: () => drawPayment() },
     });
-    checkout.on('payment.failed', response => toast(response.error?.description || 'The payment failed. Try again.', true));
+    // Checkout stays open for another try; the server records the failure once Razorpay confirms it, and mails it
+    checkout.on('payment.failed', response => {
+      toast(response.error?.description || 'The payment did not go through. Try again.', true);
+      const paymentId = response.error?.metadata?.payment_id;
+      if (paymentId) api('/billing/failed', { method: 'POST', body: { razorpay_payment_id: paymentId } }).catch(() => {});
+    });
     checkout.open();
     button.disabled = false;
     button.innerHTML = idle;

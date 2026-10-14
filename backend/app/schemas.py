@@ -161,3 +161,8 @@ class PaymentVerifyIn(Body):
     razorpay_order_id: str = Field(..., min_length=1, max_length=64)
     razorpay_payment_id: str = Field(..., min_length=1, max_length=64)
     razorpay_signature: str = Field(..., min_length=1, max_length=256)
+
+
+class PaymentFailedIn(Body):
+    """The payment id Checkout reports with a failed payment."""
+    razorpay_payment_id: str = Field(..., min_length=1, max_length=64)

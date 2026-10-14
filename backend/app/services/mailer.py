@@ -8,6 +8,7 @@ import logging
 import smtplib
 import threading
 from email.message import EmailMessage
+from zoneinfo import ZoneInfo
 
 from ..core.config import settings
 
@@ -44,16 +45,78 @@ def send(to: str, subject: str, text: str) -> None:
     threading.Thread(target=_send_now, args=(to, subject, text), daemon=True).start()
 
 
-def company_registered(org: dict, admin: dict, payment: dict) -> None:
-    send(
-        admin["email"],
-        f"Your company {org['name']} is registered on {settings.APP_NAME}",
-        f"Hello {admin['name']},\n\n"
-        f"Your company \"{org['name']}\" is now registered on the {settings.APP_NAME} system.\n\n"
-        f"Registration fee: Rs {payment['amount']}\n"
-        f"Razorpay payment: {payment['payment_id']}\n"
-        f"Administrator account: {admin['email']}\n\n"
-        f"Sign in: {settings.APP_BASE_URL}/\n\n"
-        "As the administrator you can now add your team, your assets and your manuals.\n\n"
-        f"- {settings.APP_NAME}\n",
-    )
+def _when(value) -> str:
+    return value.astimezone(ZoneInfo(settings.LOCAL_TIMEZONE)).strftime("%d %b %Y, %I:%M %p") if value else "-"
+
+
+def _tag(record: dict) -> str:
+    """Test payments say so in the subject, so nobody mistakes them for money received."""
+    return "[TEST] " if record.get("test_mode") else ""
+
+
+def _admin_line(admin: dict | None) -> str:
+    return f"Administrator: {admin['name']} <{admin['email']}>\n" if admin else ""
+
+
+def _lines(*rows: tuple[str, object]) -> str:
+    return "".join(f"{label}: {value}\n" for label, value in rows)
+
+
+def payment_succeeded(org: dict, admin: dict | None, record: dict) -> None:
+    """Registration fee paid: a receipt to the company's administrator, a notice to the platform owner."""
+    facts = _lines(
+        ("Company", org["name"]),
+        ("Amount", f"Rs {record['amount']}"),
+        ("Paid on", _when(record.get("paid_at"))),
+        ("Method", record.get("method") or "-"),
+        ("Razorpay payment ID", record["payment_id"]),
+        ("Razorpay order ID", record["order_id"]),
+    ) + ("Test mode: no real money was charged.\n" if record.get("test_mode") else "")
+    if admin:
+        send(
+            admin["email"],
+            f"{_tag(record)}Payment received: {org['name']} is registered on {settings.APP_NAME}",
+            f"Hello {admin['name']},\n\n"
+            f"We received your registration payment. Your company \"{org['name']}\" is now active on {settings.APP_NAME}.\n\n"
+            f"{facts}\n"
+            f"Sign in: {settings.APP_BASE_URL}/\n\n"
+            "As the administrator you can now add your team, your assets and your manuals.\n\n"
+            f"- {settings.APP_NAME}\n",
+        )
+    if settings.PLATFORM_OWNER_EMAIL:
+        send(
+            settings.PLATFORM_OWNER_EMAIL,
+            f"{_tag(record)}[{settings.APP_NAME}] New company paid: {org['name']} (Rs {record['amount']})",
+            f"A new company paid the registration fee and is now active.\n\n{facts}{_admin_line(admin)}\n"
+            f"Payments page: {settings.APP_BASE_URL}/#/payments\n",
+        )
+
+
+def payment_failed(org: dict, admin: dict | None, record: dict, payment_id: str, reason: str) -> None:
+    """A payment attempt that did not go through: the company may try again; the owner is told too."""
+    facts = _lines(
+        ("Company", org["name"]),
+        ("Amount", f"Rs {record['amount']}"),
+        ("Tried on", _when(record.get("failed_at"))),
+        ("Method", record.get("failed_method") or "-"),
+        ("Reason", reason),
+        ("Razorpay payment ID", payment_id),
+    ) + ("Test mode: no real money was involved.\n" if record.get("test_mode") else "")
+    if admin:
+        send(
+            admin["email"],
+            f"{_tag(record)}Payment not completed: {org['name']} on {settings.APP_NAME}",
+            f"Hello {admin['name']},\n\n"
+            f"Your registration payment for \"{org['name']}\" did not go through.\n\n{facts}\n"
+            "Nothing was charged. If money did leave your account, your bank returns it automatically.\n"
+            f"Sign in to try again: {settings.APP_BASE_URL}/\n\n"
+            f"- {settings.APP_NAME}\n",
+        )
+    if settings.PLATFORM_OWNER_EMAIL:
+        send(
+            settings.PLATFORM_OWNER_EMAIL,
+            f"{_tag(record)}[{settings.APP_NAME}] Payment failed: {org['name']}",
+            f"A registration payment did not go through. The company is still waiting for payment.\n\n"
+            f"{facts}{_admin_line(admin)}\n"
+            f"Payments page: {settings.APP_BASE_URL}/#/payments\n",
+        )

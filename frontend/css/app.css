@@ -681,7 +681,16 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
 .pay-card .error { text-align: center; }
 .pay-secure { text-align: center; margin-top: 12px; }
 .pay-secure i, .pay-card .notice i { margin-right: 6px; }
-.pay-card .notice code { font-size: 12px; background: rgba(255, 255, 255, .7); padding: 1px 5px; border-radius: 4px; }
+.pay-test { margin: 0 0 16px; padding: 12px 14px; border: 1px dashed rgba(79, 70, 229, .45); border-radius: var(--r-card); background: rgba(238, 242, 255, .7); font-size: 13px; color: var(--ink); }
+.pay-test-head { font-weight: 700; color: var(--indigo); margin-bottom: 6px; }
+.pay-test-head i { margin-right: 6px; }
+.pay-test ol { margin: 0 0 6px; padding-left: 20px; display: grid; gap: 3px; }
+.pay-test code { font-size: 12.5px; font-weight: 700; background: #fff; border: 1px solid rgba(79, 70, 229, .25); padding: 1px 6px; border-radius: 5px; user-select: all; }
+.pay-test .muted { font-size: 12px; }
+.pay-failed { display: flex; gap: 10px; margin-top: 12px; padding: 10px 12px; border-radius: var(--r-btn); background: rgba(220, 38, 38, .07); border: 1px solid rgba(220, 38, 38, .2); color: #991b1b; font-size: 13px; }
+.pay-failed > i { margin-top: 3px; }
+.pay-failed span { display: block; }
+.pay-failed .muted { color: #7f1d1d; opacity: .8; font-size: 12px; }
 @media (max-width: 640px) {
   .pay-card { padding: 22px 16px 24px; }
   .hdr-logo { margin-left: 0; height: 44px; max-width: 110px; }
