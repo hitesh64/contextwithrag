@@ -66,7 +66,7 @@ def _accept(payment: dict, decided_by: str, note: str = "") -> dict:
 @router.get("/billing/fee")
 def registration_fee():
     """Public: shown on the registration form before anyone is signed in."""
-    return {"fee": settings.REGISTRATION_FEE}
+    return {"fee": settings.REGISTRATION_FEE, "configured": bool(settings.UPI_ID)}
 
 
 @router.get("/billing")

@@ -21,6 +21,7 @@ os.environ.update(
     LOGIN_RATE_PER_MINUTE="1000",
     CORS_ORIGINS="",
     LOCAL_TIMEZONE="UTC",
+    UPI_ID="owner@okbank",
 )
 
 import pytest  # noqa: E402

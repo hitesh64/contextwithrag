@@ -107,6 +107,17 @@ def test_no_fee_means_active_at_once(client, monkeypatch):
     assert client.get(f"{API}/assets", headers=headers).status_code == 200
 
 
+def test_no_upi_id_closes_registration(client, monkeypatch):
+    """Without a UPI ID a new company could never pay, so it is not created at all."""
+    monkeypatch.setattr(settings, "UPI_ID", "")
+    assert client.get(f"{API}/billing/fee").json() == {"fee": 2999, "configured": False}
+    refused = client.post(f"{API}/auth/register", json={
+        "organization_name": "stuck", "name": "stuck admin", "email": "admin@stuck.example.com", "password": PASSWORD,
+    })
+    assert refused.status_code == 503 and "payments are not set up" in refused.json()["detail"]
+    assert database.organizations.find_one({"name": "stuck"}) is None
+
+
 def accept(client, owner: dict, payment: dict) -> dict:
     decided = client.post(f"{API}/platform/payments/{payment['id']}/decision", headers=owner, json={"decision": "accept"})
     assert decided.status_code == 200, decided.text

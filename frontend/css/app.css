@@ -671,6 +671,7 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
 .pay-card { max-width: 480px; padding: 28px 32px 32px; text-align: left; }
 .pay-card h1 { font-size: 19px; text-align: center; margin: 0 0 6px; }
 .pay-card #pay-body > .muted { text-align: center; font-size: 13px; margin: 0 0 16px; }
+.pay-card .notice { font-size: 13px; }
 .pay-top { display: flex; align-items: center; gap: 12px; padding-bottom: 16px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
 .pay-top > div { flex: 1 1 auto; min-width: 0; }
 .pay-top .org-logo { flex: none; width: 44px; height: 44px; object-fit: contain; border-radius: 10px; border: 1px solid var(--border); }

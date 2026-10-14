@@ -77,6 +77,10 @@ def register(body: RegisterIn, request: Request):
         raise HTTPException(status.HTTP_409_CONFLICT, "This email is already registered.")
     # Active only after the registration fee is paid; the platform owner's own company never pays
     paid = settings.REGISTRATION_FEE <= 0 or body.email.lower() == settings.PLATFORM_OWNER_EMAIL
+    if not paid and not settings.UPI_ID:
+        # Without a UPI ID there is no way to pay, and the new company would be stuck on the payment page
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
+                            "Registration is closed: payments are not set up on this server yet. Contact the platform owner.")
     org_id = organizations.insert_one({
         "name": body.organization_name, "status": "active" if paid else "pending_payment", "created_at": now(),
     }).inserted_id
