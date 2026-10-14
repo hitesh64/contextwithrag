@@ -277,8 +277,7 @@ pages.dashboard = async (_, query) => {
   navBadges(d);
   const period = `${day(d.period_start)} – ${day(new Date())}`;
   page().innerHTML = `
-    <div class="org-banner">${orgMark('org-banner-logo')}<div><div class="org-banner-name">${esc(me.organization_name)}</div>
-      <div class="muted">Factory dashboard · ${esc(ROLE_NAMES[me.role])}</div></div></div>
+    ${orgHero()}
     <div class="page-head"><h1>Dashboard</h1>
       <label>Period <select id="days">${[['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last 12 months']].map(([v, t]) => `<option value="${v}" ${v === days ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div>
     <div class="grid">
@@ -296,6 +295,7 @@ pages.dashboard = async (_, query) => {
     ${can('dashboard.unanswered') ? `<div class="card" id="unanswered"><h2>${fa('circle-question')}Questions the records could not answer</h2>
       <p class="hint">Each one points at a manual, SOP or record that is missing from the library.</p><div id="unanswered-list"></div></div>` : ''}</div>`;
   $('#days').onchange = event => { location.hash = `#/dashboard?days=${event.target.value}`; };
+  heroMotion();
 
   if (d.downtime_by_asset.length) {
     if (window.Chart) {
@@ -941,6 +941,57 @@ function orgMark(className) {
     : `<span class="${className} org-initial" aria-hidden="true">${esc(me.organization_name.trim().charAt(0).toUpperCase())}</span>`;
 }
 
+// Dashboard hero: a welcome beside the company's logo (its name is in the header, so it is not repeated here).
+// The greeting rises letter by letter, a sun or moon badge shows the time of day, the card tilts towards the
+// pointer with a light under it, and the quick actions are the sections this user may open.
+function orgHero() {
+  const hour = new Date().getHours();
+  const [hello, sky, skyClass] = hour >= 5 && hour < 12 ? ['Good morning', 'sun', 'sky-morning']
+    : hour >= 12 && hour < 17 ? ['Good afternoon', 'cloud-sun', 'sky-day'] : ['Good evening', 'moon', 'sky-night'];
+  const greeting = `${hello}, ${me.name.trim().split(/\s+/)[0]}`;
+  let i = 0;
+  const words = greeting.split(' ')
+    .map(word => `<span class="hero-word">${[...word].map(ch => `<span style="--i:${i++}">${esc(ch)}</span>`).join('')}</span>`)
+    .join(' ');
+  const actions = [
+    ['chat.ask', '#/chat', 'comments', 'Ask'], ['documents.view', '#/documents', 'book-open', 'Documents'],
+    ['breakdowns.view', '#/breakdowns', 'triangle-exclamation', 'Breakdowns'], ['work_orders.view', '#/work-orders', 'clipboard-list', 'Work orders'],
+  ].filter(([permission]) => can(permission));
+  const today = new Date().toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  return `<section class="org-hero" id="org-hero">
+    <span class="hero-light" aria-hidden="true"></span>
+    <div class="hero-mark ${skyClass}"><span class="hero-ring" aria-hidden="true"></span>${orgMark('org-banner-logo')}<span class="hero-sky" aria-hidden="true">${fa(sky)}</span></div>
+    <div class="hero-text">
+      <div class="hero-hello"><i class="fa-solid fa-hand hero-wave" aria-hidden="true"></i>Welcome back</div>
+      <h2 class="hero-name" aria-label="${esc(greeting)}"><span aria-hidden="true">${words}</span></h2>
+      <div class="hero-meta">
+        <span class="hero-chip">${fa('shield-halved')}${esc(ROLE_NAMES[me.role])}</span>
+        <span class="hero-chip">${fa('calendar-day')}${esc(today)}</span>
+      </div>
+    </div>
+    ${actions.length ? `<nav class="hero-actions" aria-label="Quick actions">${actions.map(([, href, icon, text], k) =>
+      `<a href="${href}" style="--i:${k}">${fa(icon)}<span>${text}</span>${fa('arrow-right hero-go')}</a>`).join('')}</nav>` : ''}
+  </section>`;
+}
+
+function heroMotion() {
+  const hero = $('#org-hero');
+  if (!hero || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  hero.addEventListener('pointermove', event => {
+    const box = hero.getBoundingClientRect();
+    const x = (event.clientX - box.left) / box.width;
+    const y = (event.clientY - box.top) / box.height;
+    hero.style.setProperty('--rx', `${((0.5 - y) * 5).toFixed(2)}deg`);
+    hero.style.setProperty('--ry', `${((x - 0.5) * 6).toFixed(2)}deg`);
+    hero.style.setProperty('--mx', `${(x * 100).toFixed(1)}%`);
+    hero.style.setProperty('--my', `${(y * 100).toFixed(1)}%`);
+  });
+  hero.addEventListener('pointerleave', () => {
+    hero.style.setProperty('--rx', '0deg');
+    hero.style.setProperty('--ry', '0deg');
+  });
+}
+
 function setImage(img, url) {
   img.hidden = !url;
   if (url) img.src = url;
@@ -1348,16 +1399,20 @@ function showSlide(i) {
 
 // Shift clock: three 8-hour shifts, A 06:00, B 14:00, C 22:00
 const SHIFTS = [['A', 'Morning', 6], ['B', 'Evening', 14], ['C', 'Night', 22]];
-function tickShift() {
-  const now = new Date();
+function currentShift(now = new Date()) {
   const minutes = now.getHours() * 60 + now.getMinutes();
   const [letter, name, startHour] = SHIFTS[minutes >= 22 * 60 || minutes < 6 * 60 ? 2 : minutes >= 14 * 60 ? 1 : 0];
   const elapsed = (minutes - startHour * 60 + 1440) % 1440;
   const left = 480 - elapsed;
-  $('#shift-name').textContent = `Shift ${letter} · ${name}`;
+  return { letter, name, share: elapsed / 480, left: `${Math.floor(left / 60)}h ${left % 60}m` };
+}
+function tickShift() {
+  const now = new Date();
+  const shift = currentShift(now);
+  $('#shift-name').textContent = `Shift ${shift.letter} · ${shift.name}`;
   $('#shift-time').textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-  $('#shift-fill').style.width = `${(elapsed / 480) * 100}%`;
-  $('#shift-left').textContent = `${Math.floor(left / 60)}h ${left % 60}m left in shift`;
+  $('#shift-fill').style.width = `${shift.share * 100}%`;
+  $('#shift-left').textContent = `${shift.left} left in shift`;
 }
 tickShift();
 setInterval(tickShift, 15000);
