@@ -19,7 +19,7 @@ const MOVE_LABEL = {
 
 let token = sessionStorage.getItem('token');
 let me = null;
-let chart = null;
+let charts = [];
 let pollTimer = null;
 const chatLog = [];
 
@@ -268,55 +268,196 @@ function navBadges(d) {
 const pages = {};
 let actions = {};
 
+// Dashboard: plant health (availability, MTTR, MTBF, downtime), the counters, the breakdown trend and status,
+// downtime by asset, the work order pipeline, what needs attention, and how well the library answers questions.
+// Every figure comes from /dashboard, counted from this factory's own records.
+const WO_STAGES = [['draft', 'Draft'], ['pending_approval', 'Awaiting approval'], ['approved', 'Approved'], ['in_progress', 'In progress'], ['completed', 'Completed']];
+const PRIORITY_TONE = { critical: 'bad', high: 'warn', medium: 'info', low: '' };
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const duration = minutes => minutes >= 60 ? [minutes / 60, 'h', 1] : [minutes, 'min', 0];
+const longSpan = hours => hours >= 72 ? [hours / 24, 'days', 1] : [hours, 'h', 1];
+
+// Numbers count up from zero once the cards are on the page
+function countUp(root) {
+  for (const el of root.querySelectorAll('[data-count]')) {
+    const target = Number(el.dataset.count);
+    const decimals = Number(el.dataset.decimals || 0);
+    const show = v => { el.textContent = v.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }); };
+    if (reduceMotion() || !Number.isFinite(target)) { show(target); continue; }
+    const start = performance.now();
+    const step = t => {
+      const p = Math.min(1, (t - start) / 1100);
+      show(target * (1 - (1 - p) ** 3));
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+}
+
+function kpiTile({ tone, icon, label, value, unit, decimals = 0, sub, info, ring }) {
+  const number = value === null || value === undefined
+    ? '<span class="kpi-none">—</span>'
+    : `<span data-count="${value}" data-decimals="${decimals}">0</span><small>${esc(unit)}</small>`;
+  return `<div class="kpi tone-${tone}" title="${esc(info)}">
+    ${ring !== undefined ? `<svg class="kpi-ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="track" cx="60" cy="60" r="52"/>
+      ${ring ? `<circle class="fill" cx="60" cy="60" r="52" pathLength="100" style="--p:${ring}"/>` : ''}</svg>` : ''}
+    <div class="kpi-top"><span class="kpi-icon">${fa(icon)}</span><span class="kpi-label">${esc(label)}</span>${fa('circle-info kpi-info')}</div>
+    <div class="kpi-value">${number}</div>
+    <div class="kpi-sub">${sub}</div>
+  </div>`;
+}
+
+function plantHealth(d) {
+  const k = d.kpis;
+  const [mttr, mttrUnit, mttrDec] = k.mttr_minutes === null ? [null, '', 0] : duration(k.mttr_minutes);
+  const [mtbf, mtbfUnit, mtbfDec] = k.mtbf_hours === null ? [null, '', 0] : longSpan(k.mtbf_hours);
+  const none = 'No breakdowns in this period';
+  return `<section class="dash-section">
+    <div class="section-head"><h2>${fa('heart-pulse')}Plant health</h2>
+      <span class="hint">${plural(k.assets_in_service, 'asset')} in service · ${plural(k.breakdowns, 'breakdown')} in ${d.period_days} days · round-the-clock basis</span></div>
+    <div class="kpi-row">
+      ${kpiTile({ tone: 'green', icon: 'gauge-high', label: 'Availability', value: k.availability_pct, unit: '%', decimals: 1, ring: k.availability_pct,
+        sub: k.availability_pct === null ? 'Add assets to measure it' : 'Uptime of the assets in service',
+        info: 'Calendar hours of the assets in service (not inactive), minus recorded downtime, as a share of the calendar hours. Plant schedules are not recorded, so assets count as running round the clock.' })}
+      ${kpiTile({ tone: 'blue', icon: 'screwdriver-wrench', label: 'MTTR', value: mttr, unit: mttrUnit, decimals: mttrDec,
+        sub: mttr === null ? none : 'Mean time to repair: downtime per breakdown',
+        info: 'Mean time to repair: the average recorded downtime of the breakdowns in this period. Records without a downtime value are left out.' })}
+      ${kpiTile({ tone: 'purple', icon: 'clock-rotate-left', label: 'MTBF', value: mtbf, unit: mtbfUnit, decimals: mtbfDec,
+        sub: mtbf === null ? none : 'Mean time between failures',
+        info: 'Mean time between failures: running hours of the assets in service (round the clock, minus downtime) divided by the number of breakdowns in this period.' })}
+      ${kpiTile({ tone: 'amber', icon: 'hourglass-half', label: 'Downtime', value: Math.round(k.downtime_minutes / 6) / 10, unit: 'h', decimals: 1,
+        sub: `${sparkline(d.trend.map(b => b.downtime_minutes))}<span>${plural(k.breakdowns, 'breakdown')}</span>`,
+        info: 'Total recorded downtime of the breakdowns reported in this period.' })}
+    </div>
+  </section>`;
+}
+
+function sparkline(values) {
+  const max = Math.max(1, ...values);
+  if (values.length < 2) return '';
+  const points = values.map((v, i) => `${(i / (values.length - 1)) * 100},${28 - (v / max) * 26}`).join(' ');
+  return `<svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
+    <polygon points="0,30 ${points} 100,30"/><polyline points="${points}"/></svg>`;
+}
+
+function cycleText(hours) {
+  if (hours === null) return 'No orders completed in this period';
+  const [value, unit] = longSpan(hours);
+  return `Average <b>${value.toFixed(1)} ${unit}</b> from creation to completion`;
+}
+
+function pipeline(d) {
+  const counts = WO_STAGES.map(([key]) => d.work_orders[key] || 0);
+  const max = Math.max(1, ...counts);
+  const open = d.work_orders_open_by_priority;
+  return `<div class="card dash-card" style="--d:4"><h2>${fa('diagram-next')}Work order pipeline</h2>
+    <div class="pipe">${WO_STAGES.map(([key, text], i) => `
+      <a class="pipe-row" href="#/work-orders?status=${key}" style="--i:${i}">
+        <span class="pipe-name">${text}</span>
+        <span class="pipe-bar"><span style="--w:${(counts[i] / max) * 100}%"></span></span>
+        <b data-count="${counts[i]}">0</b></a>`).join('')}</div>
+    <div class="pipe-foot">
+      <div class="prio">${['critical', 'high', 'medium', 'low'].map(p => `<span class="badge ${PRIORITY_TONE[p]}">${open[p] || 0} ${p}</span>`).join('')}
+        <span class="hint">open, by priority</span></div>
+      <div class="cycle">${fa('stopwatch')}${cycleText(d.work_order_cycle_hours)}</div>
+    </div></div>`;
+}
+
+function attention(d) {
+  const rows = d.attention.map(a => `<a class="att-row" href="#/breakdowns?status=open&q=${encodeURIComponent(a.asset_code)}">
+      <span class="crit crit-${esc(a.criticality)}" title="${esc(a.criticality)} criticality"></span>
+      <span class="att-name"><b>${esc(a.asset_code)}</b><span>${esc(a.name)}</span></span>
+      ${a.status === 'under_maintenance' ? badge('under_maintenance') : ''}
+      ${a.unresolved_breakdowns ? `<span class="badge bad">${plural(a.unresolved_breakdowns, 'open breakdown')}</span>` : ''}</a>`).join('');
+  return `<div class="card dash-card" style="--d:5"><h2>${fa('bell')}Needs attention</h2>
+    ${rows ? `<div class="att">${rows}</div>` : `<div class="all-clear">${fa('circle-check')}<b>All clear</b><span>No open breakdowns and no asset under maintenance.</span></div>`}</div>`;
+}
+
+function failures(d) {
+  const maxCode = Math.max(1, ...d.top_error_codes.map(c => c.breakdowns));
+  return `<div class="card dash-card" style="--d:6"><h2>${fa('repeat')}Repeat failures</h2>
+    ${d.repeat_assets.length ? `<div class="mini-list">${d.repeat_assets.map(a => `<a href="#/breakdowns?q=${encodeURIComponent(a.asset_code)}">
+      <span><b>${esc(a.asset_code)}</b> ${esc(a.name)}</span><span class="badge warn">${a.breakdowns}×</span></a>`).join('')}</div>`
+      : '<p class="hint">No asset broke down twice in this period.</p>'}
+    <h3>${fa('barcode')}Most frequent fault codes</h3>
+    ${d.top_error_codes.length ? `<div class="codes">${d.top_error_codes.map((c, i) => `<a href="#/breakdowns?error_code=${encodeURIComponent(c.error_code)}" style="--i:${i}">
+      <code>${esc(c.error_code)}</code><span class="code-bar"><span style="--w:${(c.breakdowns / maxCode) * 100}%"></span></span><b>${c.breakdowns}</b></a>`).join('')}</div>`
+      : '<p class="hint">No fault codes recorded in this period.</p>'}</div>`;
+}
+
+function knowledge(d) {
+  const answered = d.questions_asked ? Math.round(100 * (d.questions_asked - d.questions_unanswered) / d.questions_asked) : null;
+  return `<div class="card dash-card" style="--d:7"><h2>${fa('brain')}Knowledge base</h2>
+    <div class="know">
+      <div class="know-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="track" cx="60" cy="60" r="50"/>
+        ${answered ? `<circle class="fill" cx="60" cy="60" r="50" pathLength="100" style="--p:${answered}"/>` : ''}</svg>
+        <div><b>${answered === null ? '—' : `<span data-count="${answered}">0</span>%`}</b><span>answered</span></div></div>
+      <dl class="know-facts">
+        <dt>Questions asked</dt><dd data-count="${d.questions_asked}">0</dd>
+        <dt>Without evidence</dt><dd data-count="${d.questions_unanswered}">0</dd>
+        ${can('documents.view') ? `<dt>Documents ready</dt><dd data-count="${d.documents.ready || 0}">0</dd>
+        <dt>Failed processing</dt><dd data-count="${d.documents.failed || 0}">0</dd>` : ''}
+      </dl></div>
+    <p class="hint">${answered === null ? 'No questions asked in this period yet.' : 'Share of questions answered from your own manuals, SOPs and records.'}</p></div>`;
+}
+
 pages.dashboard = async (_, query) => {
   const days = query.get('days') || '90';
   const d = await api('/dashboard', { params: { days } });
   const sum = counts => Object.values(counts).reduce((a, b) => a + b, 0);
   const stat = (value, text, href, tone, icon) => `<a class="stat tone-${tone}" href="${href}"><div class="stat-icon">${fa(icon)}</div>
-    <div class="label">${esc(text)}</div><div class="value">${value}</div><div class="stat-art" aria-hidden="true">${fa(icon)}</div></a>`;
+    <div class="label">${esc(text)}</div><div class="value" data-count="${value}">0</div><div class="stat-art" aria-hidden="true">${fa(icon)}</div></a>`;
   navBadges(d);
   const period = `${day(d.period_start)} – ${day(new Date())}`;
-  page().innerHTML = `
+  const seeBreakdowns = can('breakdowns.view');
+  const status = ['open', 'in_progress', 'resolved'].map(s => d.breakdowns[s] || 0);
+  page().innerHTML = `<div class="dash" id="dash">
     ${orgHero()}
-    <div class="page-head"><h1>Dashboard</h1>
+    <div class="page-head"><h1>${fa('gauge-high')}Dashboard</h1>
       <label>Period <select id="days">${[['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last 12 months']].map(([v, t]) => `<option value="${v}" ${v === days ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div>
-    <div class="grid">
+    ${seeBreakdowns ? plantHealth(d) : ''}
+    <div class="grid dash-counters">
       ${can('assets.view') ? stat(sum(d.assets) - (d.assets.archived || 0), 'Assets in the register', '#/assets', 'blue', 'industry') : ''}
       ${can('documents.view') ? stat(d.documents.ready || 0, 'Documents ready to search', '#/documents', 'green', 'book-open')
         + stat(d.documents.failed || 0, 'Documents that failed processing', '#/documents?status=failed', 'red', 'file-circle-xmark') : ''}
-      ${can('breakdowns.view') ? stat((d.breakdowns.open || 0) + (d.breakdowns.in_progress || 0), 'Unresolved breakdowns', '#/breakdowns?status=open', 'amber', 'triangle-exclamation') : ''}
+      ${seeBreakdowns ? stat(status[0] + status[1], 'Unresolved breakdowns', '#/breakdowns?status=open', 'amber', 'triangle-exclamation') : ''}
       ${can('work_orders.view') ? stat(d.work_orders.pending_approval || 0, 'Work orders awaiting approval', '#/work-orders?status=pending_approval', 'purple', 'clipboard-check') : ''}
-      ${stat(`${d.questions_unanswered} / ${d.questions_asked}`, `Questions without evidence (${period})`, '#/dashboard', 'teal', 'circle-question')}
+      ${stat(d.questions_unanswered, `Questions without evidence (${period})`, '#/dashboard', 'teal', 'circle-question')}
     </div>
-    <div class="chart-grid"><div class="card"><h2>${fa('chart-bar')}Downtime by asset</h2>
-      <p class="hint">Recorded downtime in minutes, breakdowns reported ${esc(period)}. Records without a downtime value count as 0.</p>
-      ${d.downtime_by_asset.length ? '<div class="chart-box"><canvas id="downtime" aria-label="Downtime by asset" role="img"></canvas></div>' : '<div class="empty">No breakdowns recorded in this period.</div>'}
+    ${seeBreakdowns ? `<div class="dash-grid wide">
+      <div class="card dash-card" style="--d:1"><h2>${fa('chart-line')}Breakdown trend</h2>
+        <p class="hint">Breakdowns reported per ${d.trend_step_days === 1 ? 'day' : 'week'} and their downtime, ${esc(period)}.</p>
+        ${d.kpis.breakdowns ? '<div class="chart-box sm"><canvas id="trend" aria-label="Breakdown trend" role="img"></canvas></div>' : '<div class="empty">No breakdowns recorded in this period.</div>'}</div>
+      <div class="card dash-card" style="--d:2"><h2>${fa('chart-pie')}Breakdown status</h2>
+        ${sum(d.breakdowns) ? `<div class="donut"><canvas id="status" aria-label="Breakdowns by status" role="img"></canvas>
+          <div class="donut-center"><b data-count="${sum(d.breakdowns)}">0</b><span>records</span></div></div>
+          <div class="legend">${[['open', 'Open', '#ef4444'], ['in_progress', 'In progress', '#f59e0b'], ['resolved', 'Resolved', '#10b981']].map(([key, text, colour], i) =>
+            `<a href="#/breakdowns?status=${key}"><i style="background:${colour}"></i>${text}<b>${status[i]}</b></a>`).join('')}</div>`
+          : '<div class="empty">No breakdowns recorded yet.</div>'}</div>
+    </div>` : ''}
+    <div class="dash-grid">
+      ${seeBreakdowns ? `<div class="card dash-card" style="--d:3"><h2>${fa('chart-bar')}Downtime by asset</h2>
+        <p class="hint">Where the hours went, ${esc(period)}. Records without a downtime value count as 0.</p>
+        ${d.downtime_by_asset.length ? '<div class="chart-box sm"><canvas id="downtime" aria-label="Downtime by asset" role="img"></canvas></div>' : '<div class="empty">No breakdowns recorded in this period.</div>'}</div>` : ''}
+      ${can('work_orders.view') ? pipeline(d) : ''}
     </div>
-    ${can('dashboard.unanswered') ? `<div class="card" id="unanswered"><h2>${fa('circle-question')}Questions the records could not answer</h2>
-      <p class="hint">Each one points at a manual, SOP or record that is missing from the library.</p><div id="unanswered-list"></div></div>` : ''}</div>`;
+    <div class="dash-grid three">
+      ${seeBreakdowns ? attention(d) + failures(d) : ''}
+      ${knowledge(d)}
+    </div>
+    ${can('dashboard.unanswered') ? `<div class="card dash-card" id="unanswered" style="--d:8"><h2>${fa('circle-question')}Questions the records could not answer</h2>
+      <p class="hint">Each one points at a manual, SOP or record that is missing from the library.</p><div id="unanswered-list"></div></div>` : ''}
+  </div>`;
   $('#days').onchange = event => { location.hash = `#/dashboard?days=${event.target.value}`; };
   heroMotion();
+  countUp($('#dash'));
+  // Rings and bars grow from zero once the page has been drawn
+  requestAnimationFrame(() => requestAnimationFrame(() => $('#dash')?.classList.add('ready')));
+  // After the web font: Chart.js measures (and keeps) label widths when a chart is made
+  document.fonts.ready.then(() => { if ($('#dash')) drawDashboardCharts(d); });
 
-  if (d.downtime_by_asset.length) {
-    if (window.Chart) {
-      chart = new Chart($('#downtime'), {
-        type: 'bar',
-        data: { labels: d.downtime_by_asset.map(a => a.asset_code), datasets: [{ label: 'Downtime (minutes)', data: d.downtime_by_asset.map(a => a.downtime_minutes), backgroundColor: '#2563eb', borderRadius: 6, maxBarThickness: 22 }] },
-        options: {
-          indexAxis: 'y',
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel: ctx => `${d.downtime_by_asset[ctx.dataIndex].breakdowns} breakdown(s)` } } },
-          scales: { x: { beginAtZero: true, title: { display: true, text: 'Downtime (minutes)' }, grid: { color: 'rgba(15,23,42,0.05)' } }, y: { title: { display: true, text: 'Asset' }, grid: { display: false } } },
-        },
-      });
-    } else {
-      // The chart library could not be loaded: the same figures as a table
-      $('.chart-box').outerHTML = table([
-        { title: 'Asset', cell: a => esc(a.asset_code) }, { title: 'Downtime (min)', num: true, cell: a => a.downtime_minutes },
-        { title: 'Breakdowns', num: true, cell: a => a.breakdowns },
-      ], d.downtime_by_asset);
-    }
-  }
   if (can('dashboard.unanswered')) {
     const missing = await api('/chat/unanswered', { params: { page_size: 10 } });
     $('#unanswered-list').innerHTML = table([
@@ -324,6 +465,79 @@ pages.dashboard = async (_, query) => {
     ], missing.items, { empty: 'No unanswered questions so far.' });
   }
 };
+
+function drawDashboardCharts(d) {
+  if (!window.Chart) {
+    // The chart library could not be loaded: the downtime figures as a table, the rest is already in numbers
+    const box = $('#downtime')?.parentElement;
+    if (box) box.outerHTML = table([
+      { title: 'Asset', cell: a => esc(a.asset_code) }, { title: 'Downtime (min)', num: true, cell: a => a.downtime_minutes },
+      { title: 'Breakdowns', num: true, cell: a => a.breakdowns },
+    ], d.downtime_by_asset);
+    return;
+  }
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.color = '#64748b';
+  const grid = { color: 'rgba(15, 23, 42, .05)' };
+  const fade = (ctx, top, bottom) => {
+    const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
+    g.addColorStop(0, top); g.addColorStop(1, bottom);
+    return g;
+  };
+  const trend = $('#trend');
+  if (trend) {
+    const labels = d.trend.map(b => new Date(b.start).toLocaleDateString([], { day: 'numeric', month: 'short' }));
+    charts.push(new Chart(trend, {
+      data: {
+        labels,
+        datasets: [
+          { type: 'line', label: 'Downtime (h)', yAxisID: 'hours', data: d.trend.map(b => +(b.downtime_minutes / 60).toFixed(1)),
+            borderColor: '#f59e0b', borderWidth: 2.5, tension: .4, pointRadius: 0, pointHoverRadius: 5, fill: true,
+            backgroundColor: ctx => fade(ctx, 'rgba(245, 158, 11, .28)', 'rgba(245, 158, 11, 0)') },
+          { type: 'bar', label: 'Breakdowns', yAxisID: 'count', data: d.trend.map(b => b.breakdowns),
+            backgroundColor: ctx => fade(ctx, 'rgba(99, 102, 241, .9)', 'rgba(99, 102, 241, .35)'), borderRadius: 6, maxBarThickness: 16 },
+        ],
+      },
+      options: {
+        maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        animation: { duration: 1100, easing: 'easeOutQuart' },
+        plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } },
+          count: { position: 'left', beginAtZero: true, ticks: { precision: 0 }, grid, title: { display: true, text: 'Breakdowns' } },
+          hours: { position: 'right', beginAtZero: true, grid: { display: false }, title: { display: true, text: 'Downtime (h)' } },
+        },
+      },
+    }));
+  }
+  const status = $('#status');
+  if (status) {
+    charts.push(new Chart(status, {
+      type: 'doughnut',
+      data: { labels: ['Open', 'In progress', 'Resolved'], datasets: [{ data: ['open', 'in_progress', 'resolved'].map(s => d.breakdowns[s] || 0),
+        backgroundColor: ['#ef4444', '#f59e0b', '#10b981'], borderWidth: 3, borderColor: '#fff', hoverOffset: 8 }] },
+      options: { cutout: '72%', maintainAspectRatio: false, animation: { animateRotate: true, duration: 1200 }, plugins: { legend: { display: false } } },
+    }));
+  }
+  const downtime = $('#downtime');
+  if (downtime) {
+    charts.push(new Chart(downtime, {
+      type: 'bar',
+      data: {
+        labels: d.downtime_by_asset.map(a => a.asset_code),
+        datasets: [{ label: 'Downtime (h)', data: d.downtime_by_asset.map(a => +(a.downtime_minutes / 60).toFixed(1)), borderRadius: 7, maxBarThickness: 20,
+          backgroundColor: ctx => { const g = ctx.chart.ctx.createLinearGradient(0, 0, ctx.chart.width, 0); g.addColorStop(0, '#6366f1'); g.addColorStop(1, '#ec4899'); return g; } }],
+      },
+      options: {
+        indexAxis: 'y', maintainAspectRatio: false, animation: { duration: 1100, easing: 'easeOutQuart' },
+        plugins: { legend: { display: false }, tooltip: { callbacks: {
+          title: items => { const a = d.downtime_by_asset[items[0].dataIndex]; return `${a.asset_code} ${d.asset_names[a.asset_code] || ''}`; },
+          afterLabel: ctx => plural(d.downtime_by_asset[ctx.dataIndex].breakdowns, 'breakdown') } } },
+        scales: { x: { beginAtZero: true, grid, title: { display: true, text: 'Downtime (hours)' } }, y: { grid: { display: false } } },
+      },
+    }));
+  }
+}
 
 pages.chat = async (_, query) => {
   const options = await assetOptions();
@@ -891,7 +1105,8 @@ function currentRoute() {
 
 async function draw() {
   clearTimeout(pollTimer);
-  if (chart) { chart.destroy(); chart = null; }
+  charts.forEach(c => c.destroy());
+  charts = [];
   const { entry, id, search } = currentRoute();
   actions = { ...sharedActions };
   if (!can(entry[2])) {

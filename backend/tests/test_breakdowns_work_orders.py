@@ -298,3 +298,40 @@ def test_dashboard_counts_real_records_only(client, factory, other_factory):
     assert board["assets"] == {"active": 1} and board["work_orders"] == {"draft": 1}
     assert board["downtime_by_asset"] == [{"asset_code": "CNC-01", "downtime_minutes": 40, "breakdowns": 1}]
     assert client.get(f"{API}/dashboard", headers=other_factory.admin).json()["downtime_by_asset"] == []
+
+
+def test_dashboard_reliability_figures(client, factory, other_factory):
+    """MTTR, MTBF and availability from the factory's own records, on the stated 24/7 basis."""
+    from datetime import timedelta
+    from backend.app.core.utils import now
+    empty = client.get(f"{API}/dashboard", headers=factory.admin, params={"days": 30}).json()
+    assert empty["kpis"] == {"breakdowns": 0, "downtime_minutes": 0, "mttr_minutes": None, "mtbf_hours": None,
+                             "availability_pct": None, "assets_in_service": 0}
+    assert len(empty["trend"]) in (30, 31) and empty["trend_step_days"] == 1
+
+    press = factory.asset("PRS-01", criticality="critical")
+    lathe = factory.asset("LTH-02", criticality="low")
+    factory.asset("OLD-03", status="inactive")  # not in service: left out of the calendar time
+    other_factory.asset("PRS-01")
+    for asset, downtime, code, status in [(press, 120, "E-204", "resolved"), (press, 60, "e-204", "open"),
+                                          (lathe, None, "", "resolved"), (lathe, 30, "OVL", "resolved")]:
+        factory.breakdown(asset["id"], downtime_minutes=downtime, error_code=code or None, resolution_status=status)
+    database.breakdowns.update_many({"organization_id": factory.organization_id}, {"$set": {"reported_at": now() - timedelta(days=2)}})
+
+    board = client.get(f"{API}/dashboard", headers=factory.admin, params={"days": 30}).json()
+    kpis = board["kpis"]
+    assert kpis["breakdowns"] == 4 and kpis["downtime_minutes"] == 210 and kpis["assets_in_service"] == 2
+    assert kpis["mttr_minutes"] == 70.0  # (120 + 60 + 30) / 3: the record without downtime is left out
+    calendar = 30 * 24 * 2
+    assert kpis["mtbf_hours"] == round((calendar - 3.5) / 4, 1)
+    assert kpis["availability_pct"] == round(100 * (calendar - 3.5) / calendar, 2)
+    assert sum(b["breakdowns"] for b in board["trend"]) == 4 and sum(b["downtime_minutes"] for b in board["trend"]) == 210
+    assert board["top_error_codes"][0] == {"error_code": "E-204", "breakdowns": 2}
+    assert [a["asset_code"] for a in board["repeat_assets"]] == ["PRS-01", "LTH-02"]
+    assert board["attention"] == [{"asset_code": "PRS-01", "name": "Machine PRS-01", "criticality": "critical",
+                                   "status": "active", "unresolved_breakdowns": 1}]
+    assert board["assets_by_criticality"] == {"critical": 1, "low": 1, "high": 1}
+
+    manual_order(client, factory.admin, press["id"])
+    assert client.get(f"{API}/dashboard", headers=factory.admin).json()["work_orders_open_by_priority"] == {"medium": 1}
+    assert client.get(f"{API}/dashboard", headers=other_factory.admin).json()["kpis"]["breakdowns"] == 0
