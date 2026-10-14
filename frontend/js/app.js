@@ -309,11 +309,30 @@ function kpiTile({ tone, icon, label, value, unit, decimals = 0, sub, info, ring
   </div>`;
 }
 
+// No machines yet: the figures cannot exist, so say what to record instead of showing dashes
+function plantSetup() {
+  const step = (n, icon, title, text, href, label, allowed) => `<div class="setup-step" style="--i:${n}">
+    <span class="setup-n">${n}</span><span class="setup-icon">${fa(icon)}</span>
+    <div><b>${title}</b><p>${text}</p></div>
+    ${allowed ? `<a class="btn small" href="${href}">${label}${fa('arrow-right')}</a>` : ''}</div>`;
+  return `<section class="dash-section">
+    <div class="section-head"><h2>${fa('heart-pulse')}Plant health</h2><span class="hint">Availability, MTTR, MTBF and downtime appear here</span></div>
+    <div class="plant-setup">
+      <div class="setup-intro">${fa('chart-line')}<div><b>No machines recorded yet</b>
+        <p>These figures are counted from your own records. Add your machines and record their breakdowns, with the downtime in minutes.</p></div></div>
+      <div class="setup-steps">
+        ${step(1, 'industry', 'Add your machines', 'One asset per machine, with its criticality.', '#/assets?open=add-asset', 'Add asset', can('assets.manage'))}
+        ${step(2, 'triangle-exclamation', 'Record breakdowns', 'When a machine stops: what happened and the downtime in minutes.', '#/breakdowns?open=add-breakdown', 'Report breakdown', can('breakdowns.report'))}
+        ${step(3, 'file-import', 'Or import your log', 'An Excel or CSV breakdown register you already keep.', '#/breakdowns?open=import', 'Import', can('breakdowns.import'))}
+      </div></div></section>`;
+}
+
 function plantHealth(d) {
   const k = d.kpis;
+  if (!k.assets_in_service) return plantSetup();
   const [mttr, mttrUnit, mttrDec] = k.mttr_minutes === null ? [null, '', 0] : duration(k.mttr_minutes);
   const [mtbf, mtbfUnit, mtbfDec] = k.mtbf_hours === null ? [null, '', 0] : longSpan(k.mtbf_hours);
-  const none = 'No breakdowns in this period';
+  const none = k.breakdowns ? 'No downtime minutes recorded on the breakdowns' : 'No breakdowns in this period';
   return `<section class="dash-section">
     <div class="section-head"><h2>${fa('heart-pulse')}Plant health</h2>
       <span class="hint">${plural(k.assets_in_service, 'asset')} in service · ${plural(k.breakdowns, 'breakdown')} in ${d.period_days} days · round-the-clock basis</span></div>
@@ -1103,6 +1122,8 @@ function currentRoute() {
   return { entry: NAV.find(n => n[0] === name) || start, id, search };
 }
 
+const OPENABLE = ['add-asset', 'add-breakdown', 'import'];
+
 async function draw() {
   clearTimeout(pollTimer);
   charts.forEach(c => c.destroy());
@@ -1117,6 +1138,12 @@ async function draw() {
     await pages[entry[0]](id, new URLSearchParams(search));
     const heading = $('.page-head h1');
     if (heading && !heading.querySelector('i')) heading.insertAdjacentHTML('afterbegin', fa(entry[3]));
+    // A link may open one of the page's own forms, e.g. the dashboard's "Add asset": #/assets?open=add-asset
+    const open = new URLSearchParams(search).get('open');
+    if (OPENABLE.includes(open) && actions[open]) {
+      history.replaceState(null, '', location.hash.replace(/([?&])open=[^&]*&?/, '$1').replace(/[?&]$/, ''));
+      actions[open]();
+    }
   } catch (error) {
     if (token) page().innerHTML = `<div class="card"><h2>${fa('circle-exclamation')}This page could not be loaded</h2><p class="error">${esc(error.message)}</p><button class="btn" data-action="retry">Try again</button></div>`;
     actions.retry = route;
