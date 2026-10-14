@@ -7,11 +7,11 @@ transaction number) and a screenshot of the payment. The proof is checked in two
 2. By the model: Gemini reads the screenshot (amount, status, payee, UTR, date, signs of editing) and these
    facts are compared with what was expected here, by the rules below, not by the model.
 
-All passed: the payment is accepted and the company is active. A clear mismatch: rejected, and the company may
-send another proof. Anything unreadable or doubtful: "needs_review", for the platform owner.
+A clear mismatch: rejected at once, and the company may send another proof. Everything else waits for the
+platform owner, who confirms the UTR in the bank account; the checks tell the owner what looked wrong, if anything.
 
-What this cannot do: prove that money arrived. A carefully edited screenshot can pass every check. Only the
-receiving bank account shows the truth, which is why every accepted payment is also mailed to the platform owner.
+Why the owner always confirms: the check cannot prove that money arrived. A made-up screenshot can pass every
+check; only the receiving bank account shows the truth.
 """
 import hashlib
 import json
@@ -169,9 +169,9 @@ def read_screenshot(image: bytes, mime_type: str) -> dict:
 
 
 def verdict(checks: list[dict]) -> str:
-    """'rejected' if any check failed, 'needs_review' if any could not be decided, otherwise 'accepted'."""
+    """'rejected' if any check failed, 'doubtful' if any could not be decided, otherwise 'passed'."""
     if any(c["ok"] is False for c in checks):
         return "rejected"
     if any(c["ok"] is None for c in checks):
-        return "needs_review"
-    return "accepted"
+        return "doubtful"
+    return "passed"

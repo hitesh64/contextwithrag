@@ -81,7 +81,10 @@ def billing(user: dict = Depends(get_signed_in_user)):
 
 @router.post("/billing/proof", status_code=status.HTTP_201_CREATED)
 def submit_proof(utr: str = Form(...), screenshot: UploadFile = File(...), user: dict = Depends(get_signed_in_user)):
-    """The UTR and screenshot of the UPI payment. Checked at once; the answer says accepted, rejected or needs_review."""
+    """The UTR and screenshot of the UPI payment. Checked at once: rejected, or needs_review for the platform owner.
+
+    Never accepted here: a made-up screenshot can pass every check, so the owner confirms each payment against
+    the bank account. checks_passed tells the owner whether the check found anything wrong."""
     if user["role"] != "admin":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the administrator who registered the company sends the payment.")
     org_id = user["organization_id"]
@@ -109,17 +112,17 @@ def submit_proof(utr: str = Form(...), screenshot: UploadFile = File(...), user:
             checks += payment_check.screenshot_checks(read, utr, org["created_at"])
         except llm.LLMError as e:
             checks.append(payment_check.check("ai", "AI check of the screenshot", None, str(e)))
+    verdict = payment_check.verdict(checks)
     payment = {
         "organization_id": org_id, "organization_name": org["name"],
         "submitted_by": user["id"], "submitted_by_email": user["email"],
         "amount": settings.REGISTRATION_FEE, "utr": utr,
         "screenshot": Binary(data), "screenshot_type": kind, "screenshot_hash": image_hash,
-        "ai_read": read, "checks": checks, "status": payment_check.verdict(checks),
+        "ai_read": read, "checks": checks, "checks_passed": verdict == "passed",
+        "status": "rejected" if verdict == "rejected" else "needs_review",
         "created_at": now(), "decided_at": None, "decided_by": None, "decision_note": "",
     }
     payment["_id"] = payments.insert_one(payment).inserted_id
-    if payment["status"] == "accepted":
-        payment = _accept(payment, "automatic check")
     audit_service.record(user, "payment.submit", "payment", str(payment["_id"]), result=payment["status"], detail=f"UTR {utr}")
     if payment["status"] != "rejected":
         mailer.payment_for_owner(org, payment)
@@ -146,7 +149,7 @@ def payment_screenshot(payment_id: str, _: dict = Depends(require_platform_owner
 
 @router.post("/platform/payments/{payment_id}/decision")
 def decide_payment(payment_id: str, body: PaymentDecisionIn, owner: dict = Depends(require_platform_owner)):
-    """Accept a payment the check could not decide, or reject one, also after it was accepted (money never arrived)."""
+    """Accept a payment found in the bank account, or reject one, also after it was accepted (money never arrived)."""
     payment = payments.find_one({"_id": oid(payment_id)}, _NO_PICTURE)
     if payment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")

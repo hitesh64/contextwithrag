@@ -78,9 +78,10 @@ Render dashboard:
 - `SMTP_USER` (the Gmail address) and `SMTP_PASSWORD` (a Gmail **app password**), and `APP_BASE_URL`
   (`https://<address>`), for the "your company is registered" mail.
 
-The check reads the payer's screenshot; it cannot see the bank account. A well-edited screenshot can
-pass it, so compare every accepted UTR with the bank statement; rejecting an accepted payment on the
-Payments page locks that company again. Each proof costs one Gemini call (free key: ~20 a day).
+The check reads the payer's screenshot and rejects a wrong or reused proof by itself. It cannot see
+the bank account and a made-up screenshot can pass it, so no payment is accepted automatically: the
+owner finds the UTR in the bank or UPI app and presses Accept on the Payments page (a mail arrives for
+each payment waiting there). Rejecting an accepted payment locks that company again. Each proof costs one Gemini call (free key: ~20 a day).
 
 Render's support has said outgoing SMTP ports are blocked on its services. If the log shows
 `Mail to … could not be sent`, mail works only from a machine that allows SMTP, or through an

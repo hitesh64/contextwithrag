@@ -970,7 +970,9 @@ const PAYMENT_TEXT = {
   accepted: 'Payment accepted. Your company is active.',
   rejected: 'This proof was not accepted. Check the reasons, then send the correct UTR and screenshot.',
   needs_review: 'The AI check could not confirm everything. The platform owner will check the UTR in the bank account; you will get an email.',
+  passed: 'All checks passed. The platform owner now confirms the payment in the bank account; you will get an email when your company is active.',
 };
+const paymentText = p => PAYMENT_TEXT[p.status === 'needs_review' && p.checks_passed ? 'passed' : p.status] || '';
 
 async function showPayment() {
   clearTimeout(payTimer);
@@ -1016,8 +1018,8 @@ async function drawPayment(latest) {
       : '<div class="notice">Payments are not set up on this server yet. Contact the platform owner.</div>'}
     ${last ? `<div class="pay-result">
       <div class="pay-result-head">${badge(last.status)}<span class="muted">UTR ${esc(last.utr)} · ${when(last.created_at)}</span></div>
-      <p>${esc(PAYMENT_TEXT[last.status] || '')}</p>${checkList(last.checks)}</div>` : ''}
-    ${waiting ? `<p class="hint live">${fa('rotate')}Waiting for review. This page checks again by itself every 15 seconds.</p>`
+      <p>${esc(paymentText(last))}</p>${checkList(last.checks)}</div>` : ''}
+    ${waiting ? `<p class="hint live">${fa('rotate')}Waiting for the platform owner. This page checks again by itself every 15 seconds.</p>`
       : b.configured ? `<form id="proof-form" class="proof-form">
       <h2>After paying, verify your payment</h2>
       <label>UTR / UPI transaction ID <input name="utr" required inputmode="numeric" pattern="[0-9 ]{12,15}" maxlength="15" placeholder="12-digit number from your UPI app" autocomplete="off"></label>
@@ -1064,8 +1066,9 @@ pages.payments = async (_, query) => {
   };
   page().innerHTML = `
     <div class="page-head"><h1>Payments</h1></div>
-    <div class="notice">Registration fees of new companies. The AI check reads the screenshot; it cannot see your bank account.
-      Before you accept a payment, find its UTR and amount in your bank or UPI app. Rejecting an accepted payment locks that company again.</div>
+    <div class="notice">Registration fees of new companies. The AI check rejects wrong and reused proofs by itself; every other payment waits here.
+      It reads only the screenshot and cannot see your bank account, so accept a payment only after you find its UTR and amount in your bank or UPI app.
+      Rejecting an accepted payment locks that company again.</div>
     <form class="filters" id="filters"><label>Status<select name="status">${[['needs_review', 'Needs review'], ['accepted', 'Accepted'], ['rejected', 'Rejected'], ['', 'All']]
       .map(([v, t]) => `<option value="${v}" ${v === params.status ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
       <button class="btn" type="submit">Apply</button></form>

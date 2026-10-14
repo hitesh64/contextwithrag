@@ -103,23 +103,34 @@ def test_no_fee_means_active_at_once(client, monkeypatch):
     assert client.get(f"{API}/assets", headers=headers).status_code == 200
 
 
-def test_correct_proof_activates_and_mails(client, screenshot, mails):
+def accept(client, owner: dict, payment: dict) -> dict:
+    decided = client.post(f"{API}/platform/payments/{payment['id']}/decision", headers=owner, json={"decision": "accept"})
+    assert decided.status_code == 200, decided.text
+    return decided.json()
+
+
+def test_correct_proof_still_waits_for_the_owner(client, screenshot, mails):
+    """A made-up screenshot can pass every check, so only the owner, who sees the bank account, accepts."""
     headers = register(client, "acme")
     screenshot.read = good_read("123456789012")
     response = prove(client, headers, "1234 5678 9012")
     assert response.status_code == 201, response.text
     body = response.json()
-    assert body["payment"]["status"] == "accepted" and body["organization_status"] == "active"
+    assert body["payment"]["status"] == "needs_review" and body["payment"]["checks_passed"] is True
+    assert body["organization_status"] == "pending_payment"
     assert all(c["ok"] for c in body["payment"]["checks"])
     # The model's own idea of today is out of date: it is told the date, so a payment made today is not "future"
     assert f"Today is {now().date().isoformat()}" in screenshot.prompts[0]
     assert "screenshot" not in body["payment"]
+    assert client.get(f"{API}/assets", headers=headers).status_code == 402
+    assert [m["to"] for m in mails] == [OWNER] and "Payment to confirm" in mails[0]["subject"]
+    assert prove(client, headers, "123456789012").status_code == 409  # waits for the owner
+
+    accept(client, owner_headers(client), body["payment"])
     assert client.get(f"{API}/assets", headers=headers).status_code == 200
     company = [m for m in mails if m["to"] == "admin@acme.example.com"]
     assert len(company) == 1 and "acme is registered on ContextBasedRAG" in company[0]["subject"]
-    assert any(m["to"] == OWNER for m in mails)
-    again = prove(client, headers, "123456789012")
-    assert again.status_code == 409
+    assert prove(client, headers, "123456789012").status_code == 409  # already active
 
 
 @pytest.mark.parametrize("change, failed", [
@@ -149,7 +160,7 @@ def test_payment_dated_before_registration_is_rejected(client, screenshot):
 def test_reused_utr_or_screenshot_is_rejected_without_a_model_call(client, screenshot):
     first = register(client, "acme")
     screenshot.read = good_read("123456789012")
-    assert prove(client, first, "123456789012").json()["payment"]["status"] == "accepted"
+    accept(client, owner_headers(client), prove(client, first, "123456789012").json()["payment"])
     calls = screenshot.calls
 
     second = register(client, "copycat")
@@ -164,8 +175,8 @@ def test_doubtful_proof_goes_to_the_owner(client, screenshot, mails):
     headers = register(client, "acme")
     screenshot.read = {**good_read("123456789012"), "signs_of_editing": ["digits in a different font"]}
     payment = prove(client, headers, "123456789012").json()["payment"]
-    assert payment["status"] == "needs_review"
-    assert prove(client, headers, "123456789012").status_code == 409  # waits for the owner
+    assert payment["status"] == "needs_review" and payment["checks_passed"] is False
+    assert "check found problems" in mails[0]["subject"]
     assert client.get(f"{API}/platform/payments", headers=headers).status_code == 403
 
     owner = owner_headers(client)
@@ -173,8 +184,7 @@ def test_doubtful_proof_goes_to_the_owner(client, screenshot, mails):
     assert [p["id"] for p in listed["items"]] == [payment["id"]]
     picture = client.get(f"{API}/platform/payments/{payment['id']}/screenshot", headers=owner)
     assert picture.content == PNG and picture.headers["content-type"] == "image/png"
-    decided = client.post(f"{API}/platform/payments/{payment['id']}/decision", headers=owner, json={"decision": "accept"})
-    assert decided.json()["status"] == "accepted"
+    assert accept(client, owner, payment)["status"] == "accepted"
     assert client.get(f"{API}/assets", headers=headers).status_code == 200
     assert any("registered" in m["subject"] for m in mails if m["to"] == "admin@acme.example.com")
 
@@ -192,6 +202,8 @@ def test_owner_can_withdraw_an_accepted_payment(client, screenshot, mails):
     screenshot.read = good_read("123456789012")
     payment = prove(client, headers, "123456789012").json()["payment"]
     owner = owner_headers(client)
+    accept(client, owner, payment)
+    assert client.get(f"{API}/assets", headers=headers).status_code == 200
     rejected = client.post(f"{API}/platform/payments/{payment['id']}/decision", headers=owner,
                            json={"decision": "reject", "note": "Not in the bank statement"})
     assert rejected.json()["status"] == "rejected"

@@ -68,7 +68,8 @@ def payment_for_owner(org: dict, payment: dict) -> None:
     reasons = "\n".join(f"  - {c['label']}: {RESULT[c['ok']]} {c['detail']}" for c in payment["checks"])
     send(
         settings.PLATFORM_OWNER_EMAIL,
-        f"[{settings.APP_NAME}] Payment {payment['status'].replace('_', ' ')}: {org['name']} (UTR {payment['utr']})",
+        f"[{settings.APP_NAME}] Payment to confirm: {org['name']} (UTR {payment['utr']})"
+        + ("" if payment.get("checks_passed") else " - check found problems"),
         f"Company: {org['name']}\nAmount expected: Rs {payment['amount']}\nUTR: {payment['utr']}\n"
         f"Result: {payment['status']}\n\nChecks:\n{reasons}\n\n"
         f"Confirm the UTR in your bank or UPI app. Review: {settings.APP_BASE_URL}/#/payments\n",
