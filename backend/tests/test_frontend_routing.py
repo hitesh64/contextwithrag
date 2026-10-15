@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_page_drawing_order():
     node = shutil.which("node")
     if node is None:
-        pytest.skip("Node.js is not installed; run: node --test frontend/tests")
+        pytest.skip("Node.js is not installed; run: node --test frontend/tests/latest.test.js")
     run = subprocess.run(
         [node, "--test", str(ROOT / "frontend" / "tests" / "latest.test.js")], capture_output=True, text=True, timeout=120,
     )

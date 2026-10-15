@@ -1,5 +1,5 @@
 'use strict';
-// Run with: node --test frontend/tests   (also run by backend/tests/test_frontend_routing.py)
+// Run with: node --test frontend/tests/latest.test.js   (also run by backend/tests/test_frontend_routing.py)
 const assert = require('node:assert');
 const { test } = require('node:test');
 const { latestOnly } = require('../js/latest.js');

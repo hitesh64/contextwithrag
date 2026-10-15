@@ -64,7 +64,7 @@ The tests use an in-memory database, a temporary vector index and a fake model, 
 network, no database and no API quota. They cover login and roles, isolation between factories,
 upload validation and failure handling, citation validation, conflict detection and who may close
 a conflict, imports, the approval rules, the audit trail, and the evaluation's own scoring. One test
-runs `node --test frontend/tests` (the page shown is the page the user is on, however slowly an
+runs `node --test frontend/tests/latest.test.js` (the page shown is the page the user is on, however slowly an
 earlier page answers) and is skipped if Node.js is not installed.
 
 ## Evaluation
@@ -105,6 +105,9 @@ backend/app/services    ingestion, retrieval, answering, factory context, work o
 backend/tests           automated tests
 backend/eval            labelled questions and the evaluation script
 backend/scripts         sample data generator and demo seeding
-frontend                the application (app.html, js, css), served at /
+frontend                the application (app.html, js, css, img), served at /
+frontend/tests          browser-free test of the page-drawing helper (Node.js)
 data/sample             synthetic sample dataset
+data/conflict_eval      labelled corpus for the conflict-detection evaluation
+docs                    design, deployment and evaluation notes
 ```
