@@ -497,8 +497,12 @@ function drawDashboardCharts(d) {
     return;
   }
   Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
-  Chart.defaults.color = '#64748b';
-  const grid = { color: 'rgba(15, 23, 42, .05)' };
+  Chart.defaults.color = '#9aa8bc';
+  Chart.defaults.borderColor = 'rgba(148, 163, 184, .12)';
+  Chart.defaults.plugins.tooltip.backgroundColor = '#13203a';
+  Chart.defaults.plugins.tooltip.borderColor = 'rgba(148, 163, 184, .25)';
+  Chart.defaults.plugins.tooltip.borderWidth = 1;
+  const grid = { color: 'rgba(148, 163, 184, .1)' };
   const fade = (ctx, top, bottom) => {
     const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
     g.addColorStop(0, top); g.addColorStop(1, bottom);
@@ -515,7 +519,7 @@ function drawDashboardCharts(d) {
             borderColor: '#f59e0b', borderWidth: 2.5, tension: .4, pointRadius: 0, pointHoverRadius: 5, fill: true,
             backgroundColor: ctx => fade(ctx, 'rgba(245, 158, 11, .28)', 'rgba(245, 158, 11, 0)') },
           { type: 'bar', label: 'Breakdowns', yAxisID: 'count', data: d.trend.map(b => b.breakdowns),
-            backgroundColor: ctx => fade(ctx, 'rgba(99, 102, 241, .9)', 'rgba(99, 102, 241, .35)'), borderRadius: 6, maxBarThickness: 16 },
+            backgroundColor: ctx => fade(ctx, 'rgba(59, 130, 246, .95)', 'rgba(59, 130, 246, .3)'), borderRadius: 6, maxBarThickness: 16 },
         ],
       },
       options: {
@@ -535,7 +539,7 @@ function drawDashboardCharts(d) {
     charts.push(new Chart(status, {
       type: 'doughnut',
       data: { labels: ['Open', 'In progress', 'Resolved'], datasets: [{ data: ['open', 'in_progress', 'resolved'].map(s => d.breakdowns[s] || 0),
-        backgroundColor: ['#ef4444', '#f59e0b', '#10b981'], borderWidth: 3, borderColor: '#fff', hoverOffset: 8 }] },
+        backgroundColor: ['#ef4444', '#f59e0b', '#10b981'], borderWidth: 3, borderColor: '#0d1628', hoverOffset: 8 }] },
       options: { cutout: '72%', maintainAspectRatio: false, animation: { animateRotate: true, duration: 1200 }, plugins: { legend: { display: false } } },
     }));
   }
@@ -546,7 +550,7 @@ function drawDashboardCharts(d) {
       data: {
         labels: d.downtime_by_asset.map(a => a.asset_code),
         datasets: [{ label: 'Downtime (h)', data: d.downtime_by_asset.map(a => +(a.downtime_minutes / 60).toFixed(1)), borderRadius: 7, maxBarThickness: 20,
-          backgroundColor: ctx => { const g = ctx.chart.ctx.createLinearGradient(0, 0, ctx.chart.width, 0); g.addColorStop(0, '#6366f1'); g.addColorStop(1, '#ec4899'); return g; } }],
+          backgroundColor: ctx => { const g = ctx.chart.ctx.createLinearGradient(0, 0, ctx.chart.width, 0); g.addColorStop(0, '#2563eb'); g.addColorStop(1, '#22d3ee'); return g; } }],
       },
       options: {
         indexAxis: 'y', maintainAspectRatio: false, animation: { duration: 1100, easing: 'easeOutQuart' },
@@ -1414,7 +1418,7 @@ async function payNow(button) {
     const order = await api('/billing/order', { method: 'POST' });
     const checkout = new window.Razorpay({
       key: order.key_id, order_id: order.order_id, amount: order.amount, currency: order.currency,
-      name: order.name, description: order.description, prefill: order.prefill, theme: { color: '#4f46e5' },
+      name: order.name, description: order.description, prefill: order.prefill, theme: { color: '#2563eb' },
       handler: async ({ razorpay_order_id, razorpay_payment_id, razorpay_signature }) => {
         busy('Confirming the payment…');
         try {
@@ -1693,7 +1697,7 @@ const isDrawer = () => matchMedia('(max-width: 980px)').matches;
 // Chart text in the interface font
 if (window.Chart) {
   Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
-  Chart.defaults.color = '#5b6472';
+  Chart.defaults.color = '#9aa8bc';
 }
 
 // Sidebar: icon rail on desktop (remembered), drawer on small screens
