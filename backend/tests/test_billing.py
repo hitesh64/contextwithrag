@@ -68,7 +68,8 @@ def gateway(monkeypatch):
 @pytest.fixture
 def mails(monkeypatch):
     sent = []
-    monkeypatch.setattr(mailer, "send", lambda to, subject, text: sent.append({"to": to, "subject": subject, "text": text}))
+    monkeypatch.setattr(mailer, "send", lambda to, subject, text, attachments=None: sent.append(
+        {"to": to, "subject": subject, "text": text, "attachments": attachments or []}))
     return sent
 
 
@@ -328,3 +329,78 @@ def test_only_the_administrator_changes_the_logo(client, factory):
     viewer = factory.user("viewer")
     response = client.put(f"{API}/organization/logo", headers=viewer, files={"file": ("logo.png", PNG, "image/png")})
     assert response.status_code == 403
+
+
+def pay(client, gateway, name: str) -> tuple[dict, dict]:
+    headers = register(client, name)
+    paid = gateway.pay(order(client, headers)["order_id"])
+    assert verify(client, headers, paid).status_code == 200
+    return headers, client.get(f"{API}/billing", headers=headers).json()["payments"][0]
+
+
+def pdf_text(data: bytes) -> str:
+    import pymupdf
+
+    with pymupdf.open(stream=data, filetype="pdf") as doc:
+        return " ".join(page.get_text() for page in doc)
+
+
+def test_paid_company_gets_a_numbered_bill_by_mail(client, gateway, mails):
+    _, record = pay(client, gateway, "acme")
+    assert record["invoice_number"].startswith("CBR-") and record["invoice_number"].endswith("-00001")
+    assert record["billed_to"] == {"company": "acme", "name": "acme admin", "email": "admin@acme.example.com"}
+    # The company's administrator and the platform owner each get the same PDF bill
+    assert [m["to"] for m in mails] == ["admin@acme.example.com", OWNER]
+    for mail in mails:
+        (name, data, media_type), = mail["attachments"]
+        assert name == f"Bill-{record['invoice_number']}.pdf" and media_type == "application/pdf"
+        assert record["invoice_number"] in mail["text"]
+    text = pdf_text(mails[0]["attachments"][0][1])
+    for expected in (record["invoice_number"], "acme", "admin@acme.example.com", "2,999.00", "PAID",
+                     "Rupees Two Thousand Nine Hundred Ninety Nine Only", record["payment_id"], "UPI", "TEST PAYMENT"):
+        assert expected in text, expected
+
+
+def test_bill_numbers_run_on_and_never_change(client, gateway, mails):
+    _, first = pay(client, gateway, "acme")
+    _, second = pay(client, gateway, "zenith")
+    assert first["invoice_number"][-5:] == "00001" and second["invoice_number"][-5:] == "00002"
+    owner = owner_headers(client)
+    again = client.get(f"{API}/billing/payments/{first['id']}/bill", headers=owner)
+    assert again.status_code == 200 and again.headers["content-type"] == "application/pdf"
+    assert f'filename="Bill-{first["invoice_number"]}.pdf"' in again.headers["content-disposition"]
+    assert first["invoice_number"] in pdf_text(again.content)
+    assert database.payments.find_one({"payment_id": first["payment_id"]})["invoice_number"] == first["invoice_number"]
+
+
+def test_bill_is_only_for_the_owner_and_the_paying_admin(client, gateway, mails):
+    headers, record = pay(client, gateway, "acme")
+    url = f"{API}/billing/payments/{record['id']}/bill"
+    assert client.get(url, headers=headers).status_code == 200
+    other, _ = pay(client, gateway, "rival")
+    assert client.get(url, headers=other).status_code == 404
+    created = client.post(f"{API}/users", headers=headers, json={
+        "name": "Tech One", "email": "tech@acme.example.com", "password": PASSWORD, "role": "technician",
+    })
+    assert created.status_code == 201
+    tech = {"Authorization": "Bearer " + client.post(f"{API}/auth/login", json={
+        "email": "tech@acme.example.com", "password": PASSWORD}).json()["access_token"]}
+    assert client.get(url, headers=tech).status_code == 404
+    assert client.get(url).status_code == 401
+
+
+def test_unpaid_order_has_no_bill(client, gateway, mails):
+    headers = register(client, "acme")
+    order(client, headers)
+    record = database.payments.find_one({"status": "unpaid"})
+    assert "invoice_number" not in record
+    assert client.get(f"{API}/billing/payments/{record['_id']}/bill", headers=owner_headers(client)).status_code == 404
+
+
+def test_payment_from_before_bills_gets_its_number_on_first_download(client, gateway, mails):
+    _, record = pay(client, gateway, "acme")
+    database.payments.update_one({"payment_id": record["payment_id"]}, {"$unset": {"invoice_number": "", "billed_to": ""}})
+    response = client.get(f"{API}/billing/payments/{record['id']}/bill", headers=owner_headers(client))
+    assert response.status_code == 200
+    stored = database.payments.find_one({"payment_id": record["payment_id"]})
+    assert stored["invoice_number"].endswith("-00002") and stored["billed_to"]["company"] == "acme"

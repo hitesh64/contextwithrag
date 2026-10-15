@@ -55,6 +55,7 @@ def init_db() -> None:
     payments.create_index("order_id", unique=True, sparse=True)
     # Set only once paid: one Razorpay payment can activate one company, never two
     payments.create_index("payment_id", unique=True, sparse=True)
+    payments.create_index("invoice_number", unique=True, sparse=True)
 
 
 def next_number(organization_id: str, kind: str) -> int:

@@ -19,7 +19,8 @@ def mails(monkeypatch):
     sent = []
     monkeypatch.setattr(settings, "SMTP_USER", "mailer@example.com")
     monkeypatch.setattr(settings, "SMTP_PASSWORD", "app-password")
-    monkeypatch.setattr(mailer, "send", lambda to, subject, text: sent.append({"to": to, "subject": subject, "text": text}))
+    monkeypatch.setattr(mailer, "send", lambda to, subject, text, attachments=None: sent.append(
+        {"to": to, "subject": subject, "text": text, "attachments": attachments or []}))
     return sent
 
 

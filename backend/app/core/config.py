@@ -75,6 +75,11 @@ class Settings:
     RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "").strip()
     # Sees every company's payment on the Payments page; the owner's own company never pays
     PLATFORM_OWNER_EMAIL = os.getenv("PLATFORM_OWNER_EMAIL", "").strip().lower()
+    # The seller printed on the bill of every registration fee; bill numbers run PREFIX-YEAR-00001, 00002, ...
+    INVOICE_PREFIX = os.getenv("INVOICE_PREFIX", "CBR").strip() or "CBR"
+    INVOICE_SELLER_NAME = os.getenv("INVOICE_SELLER_NAME", "").strip() or APP_NAME
+    INVOICE_SELLER_ADDRESS = os.getenv("INVOICE_SELLER_ADDRESS", "").strip()
+    INVOICE_SELLER_GSTIN = os.getenv("INVOICE_SELLER_GSTIN", "").strip()
 
     # Outgoing mail (Gmail: smtp.gmail.com, 587, the account address and an app password). Empty SMTP_USER: no mail.
     SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()

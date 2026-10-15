@@ -10,14 +10,14 @@ there, all to the same _settle(), so a payment is counted once whichever arrives
 import json
 import logging
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 
 from ..core.config import settings
 from ..core.database import organizations, payments, users
-from ..core.security import get_signed_in_user, require_platform_owner
+from ..core.security import get_signed_in_user, is_platform_owner, require_platform_owner
 from ..core.utils import clean, now, oid
 from ..schemas import PaymentFailedIn, PaymentVerifyIn
-from ..services import audit_service, mailer, razorpay
+from ..services import audit_service, invoice, mailer, razorpay
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["billing"])
@@ -66,11 +66,22 @@ def _settle(record: dict, payment: dict) -> bool:
         organizations.update_one({"_id": oid(record["organization_id"]), "status": "pending_payment"},
                                  {"$set": {"status": "active", "activated_at": now()}})
         org, admin = _organization(record["organization_id"]), _admin(record["organization_id"])
-        record = payments.find_one({"_id": record["_id"]})
+        record = invoice.numbered(payments.find_one({"_id": record["_id"]}))
         if admin:
-            audit_service.record(admin, "payment.paid", "payment", str(record["_id"]), detail=f"Razorpay {payment['id']}")
-        mailer.payment_succeeded(org, admin, record)
+            audit_service.record(admin, "payment.paid", "payment", str(record["_id"]),
+                                 detail=f"Razorpay {payment['id']}; bill {record['invoice_number']}")
+        mailer.payment_succeeded(org, admin, record, _bill(record))
     return True
+
+
+def _bill(record: dict) -> tuple[str, bytes, str] | None:
+    """The PDF bill of a paid payment, for a mail. A bill that cannot be made never stops the payment being counted:
+    it can still be downloaded from the Payments page later."""
+    try:
+        return invoice.filename(record), invoice.pdf(record), "application/pdf"
+    except Exception:
+        log.exception("The bill of payment %s could not be made", record["_id"])
+        return None
 
 
 def _admin(organization_id: str) -> dict | None:
@@ -217,6 +228,20 @@ async def webhook(request: Request, x_razorpay_signature: str = Header("")):
         except razorpay.RazorpayError as e:
             raise _bad_gateway(e)  # Razorpay sends the webhook again later
     return {"ok": True}
+
+
+@router.get("/billing/payments/{record_id}/bill")
+def download_bill(record_id: str, user: dict = Depends(get_signed_in_user)):
+    """The PDF bill of a paid registration fee: for the platform owner, and for the paying company's administrator."""
+    record = payments.find_one({"_id": oid(record_id), "status": "paid"})
+    allowed = record is not None and (
+        is_platform_owner(user) or (user["role"] == "admin" and user["organization_id"] == record["organization_id"])
+    )
+    if not allowed:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+    record = invoice.numbered(record)
+    return Response(invoice.pdf(record), media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{invoice.filename(record)}"'})
 
 
 @router.get("/platform/payments")

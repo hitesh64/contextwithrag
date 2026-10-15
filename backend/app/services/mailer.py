@@ -19,12 +19,19 @@ def configured() -> bool:
     return bool(settings.SMTP_USER and settings.SMTP_PASSWORD)
 
 
-def _send_now(to: str, subject: str, text: str) -> bool:
+# A file sent with a mail: (file name, bytes, media type such as "application/pdf")
+Attachment = tuple[str, bytes, str]
+
+
+def _send_now(to: str, subject: str, text: str, attachments: list[Attachment]) -> bool:
     message = EmailMessage()
     message["From"] = f"{settings.APP_NAME} <{settings.MAIL_FROM}>"
     message["To"] = to
     message["Subject"] = subject
     message.set_content(text)
+    for name, data, media_type in attachments:
+        maintype, subtype = media_type.split("/", 1)
+        message.add_attachment(data, maintype=maintype, subtype=subtype, filename=name)
     try:
         with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20) as server:
             server.starttls()
@@ -37,12 +44,13 @@ def _send_now(to: str, subject: str, text: str) -> bool:
         return False
 
 
-def send(to: str, subject: str, text: str) -> None:
-    """Send one plain-text mail in the background. Does nothing, apart from a log line, when SMTP is not set up."""
+def send(to: str, subject: str, text: str, attachments: list[Attachment] | None = None) -> None:
+    """Send one plain-text mail, with any files, in the background. Does nothing, apart from a log line, when SMTP
+    is not set up."""
     if not configured():
         log.warning("SMTP is not configured; mail to %s not sent: %s", to, subject)
         return
-    threading.Thread(target=_send_now, args=(to, subject, text), daemon=True).start()
+    threading.Thread(target=_send_now, args=(to, subject, text, attachments or []), daemon=True).start()
 
 
 def _when(value) -> str:
@@ -62,9 +70,12 @@ def _lines(*rows: tuple[str, object]) -> str:
     return "".join(f"{label}: {value}\n" for label, value in rows)
 
 
-def payment_succeeded(org: dict, admin: dict | None, record: dict) -> None:
-    """Registration fee paid: a receipt to the company's administrator, a notice to the platform owner."""
+def payment_succeeded(org: dict, admin: dict | None, record: dict, bill: Attachment | None = None) -> None:
+    """Registration fee paid: a receipt to the company's administrator, a notice to the platform owner; both with
+    the bill attached."""
+    files = [bill] if bill else []
     facts = _lines(
+        *([("Bill no", record["invoice_number"])] if record.get("invoice_number") else []),
         ("Company", org["name"]),
         ("Amount", f"Rs {record['amount']}"),
         ("Paid on", _when(record.get("paid_at"))),
@@ -79,16 +90,21 @@ def payment_succeeded(org: dict, admin: dict | None, record: dict) -> None:
             f"Hello {admin['name']},\n\n"
             f"We received your registration payment. Your company \"{org['name']}\" is now active on {settings.APP_NAME}.\n\n"
             f"{facts}\n"
-            f"Sign in: {settings.APP_BASE_URL}/\n\n"
+            + ("The bill for this payment is attached as a PDF. You can download it again any time under Users.\n\n"
+               if bill else "")
+            + f"Sign in: {settings.APP_BASE_URL}/\n\n"
             "As the administrator you can now add your team, your assets and your manuals.\n\n"
             f"- {settings.APP_NAME}\n",
+            files,
         )
     if settings.PLATFORM_OWNER_EMAIL:
         send(
             settings.PLATFORM_OWNER_EMAIL,
             f"{_tag(record)}[{settings.APP_NAME}] New company paid: {org['name']} (Rs {record['amount']})",
             f"A new company paid the registration fee and is now active.\n\n{facts}{_admin_line(admin)}\n"
-            f"Payments page: {settings.APP_BASE_URL}/#/payments\n",
+            + ("The bill is attached, and on the Payments page.\n" if bill else "")
+            + f"Payments page: {settings.APP_BASE_URL}/#/payments\n",
+            files,
         )
 
 

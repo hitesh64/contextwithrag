@@ -1017,7 +1017,8 @@ pages.audit = async (_, query) => {
 };
 
 pages.users = async () => {
-  const [data, catalogue] = await Promise.all([api('/users'), api('/permissions')]);
+  const [data, catalogue, billing] = await Promise.all([api('/users'), api('/permissions'), api('/billing').catch(() => null)]);
+  const paid = (billing?.payments || []).filter(p => p.status === 'paid');
   const roleOptions = ROLES.map(r => [r, ROLE_NAMES[r]]);
   const groups = [...new Set(catalogue.permissions.map(p => p.group))];
   const access = u => u.role === 'admin' ? 'Everything' : u.custom_permissions
@@ -1029,6 +1030,9 @@ pages.users = async () => {
         <div><p class="hint">Shown in the header and on the dashboard for everyone in ${esc(me.organization_name)}. PNG, JPG or WebP, up to 512 KB.</p>
         <div class="actions"><button class="btn small" data-action="logo-change">${me.organization_logo_url ? 'Change logo' : 'Upload logo'}</button>
           ${me.organization_logo_url ? '<button class="btn small danger" data-action="logo-remove">Remove</button>' : ''}</div></div></div></div>
+    ${paid.length ? `<div class="card"><h2>${fa('file-invoice')}Registration bill</h2>
+      <p class="hint">The bill of your registration fee, also sent by mail when you paid.</p>
+      <div class="actions">${paid.map(p => `${billButton(p)} <span class="muted">${rupees(p.amount)} · paid ${when(p.paid_at)}${p.test_mode ? ' · test' : ''}</span>`).join('<br>')}</div></div>` : ''}
     <div class="notice">A role gives a standard set of access. Viewer: read and ask. Technician: also report breakdowns, draft work orders and carry out approved ones.
       Maintenance manager: also manage assets and documents, import records, approve work orders and close conflicts. Administrator: everything, manages users, and may approve a work order they wrote themselves.
       With <b>Access</b> you choose for one user which sections are visible and what that user may do, for example who may approve work orders.</div>
@@ -1114,6 +1118,13 @@ pages.users = async () => {
 
 const sharedActions = { ...actions };
 sharedActions['open-doc'] = el => openDocument(el.dataset.id, el.dataset.page);
+// The PDF bill of a paid registration fee (Payments for the platform owner, Users for the company's administrator)
+sharedActions.bill = el => attempt(async () => {
+  const response = await api(`/billing/payments/${el.dataset.id}/bill`, { raw: true });
+  const name = /filename="?([^";]+)/i.exec(response.headers.get('content-disposition') || '');
+  saveFile(await response.blob(), name ? name[1] : 'Bill.pdf');
+}, 'Bill downloaded');
+const billButton = p => `<button class="btn small" data-action="bill" data-id="${esc(p.id)}">${fa('file-invoice')}${p.invoice_number ? esc(p.invoice_number) : 'Bill'}</button>`;
 
 function currentRoute() {
   const [path, search = ''] = location.hash.replace(/^#\/?/, '').split('?');
@@ -1465,6 +1476,7 @@ pages.payments = async (_, query) => {
       { title: 'Amount', num: true, cell: p => rupees(p.amount) },
       { title: 'Razorpay', cell: p => `${p.payment_id ? `<code>${esc(p.payment_id)}</code>` : ''}<div class="muted">${esc(p.order_id)}${p.method ? ` · ${esc(p.method)}` : ''}</div>` },
       { title: 'Status', cell: p => badge(p.status) + (p.test_mode ? ' <span class="badge">test</span>' : '') + (p.error ? `<div class="muted">${esc(p.error)}</div>` : '') },
+      { title: 'Bill', cell: p => (p.status === 'paid' ? billButton(p) : '<span class="muted">After payment</span>') },
     ], data.items, { empty: 'No payments here.' })}${pager(data, 'pay-page')}`;
   $('#filters').onsubmit = event => { event.preventDefault(); location.hash = '#/payments?' + new URLSearchParams(new FormData(event.target)); };
   actions['pay-page'] = el => { query.set('page', el.dataset.page); location.hash = '#/payments?' + query; };
