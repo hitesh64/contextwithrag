@@ -90,7 +90,7 @@ def payment_succeeded(org: dict, admin: dict | None, record: dict, bill: Attachm
             f"Hello {admin['name']},\n\n"
             f"We received your registration payment. Your company \"{org['name']}\" is now active on {settings.APP_NAME}.\n\n"
             f"{facts}\n"
-            + ("The bill for this payment is attached as a PDF. You can download it again any time under Users.\n\n"
+            + ("The bill for this payment is attached as a PDF. You can view, print or download it again any time under Users.\n\n"
                if bill else "")
             + f"Sign in: {settings.APP_BASE_URL}/\n\n"
             "As the administrator you can now add your team, your assets and your manuals.\n\n"

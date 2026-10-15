@@ -106,8 +106,8 @@ h3 { font-size: 9pt; color: #5b6472; margin: 18px 0 4px 0; text-transform: upper
 """
 
 
-def pdf(record: dict) -> bytes:
-    """The one-page bill of a numbered, paid payment record."""
+def _body(record: dict) -> str:
+    """The content of the bill of a numbered, paid payment record, shared by the PDF and the printable page."""
     e = lambda value: escape(str(value or ""))  # noqa: E731
     bill_to = record.get("billed_to", {})
     paid_at = _local(record["paid_at"])
@@ -122,7 +122,7 @@ def pdf(record: dict) -> bytes:
     amount = indian_money(record["amount"])
     test = ('<p class="test">TEST PAYMENT: made with Razorpay test keys. No real money was charged.</p>'
             if record.get("test_mode") else "")
-    html = f"""
+    return f"""
     <table class="top"><tr>
       <td><div class="brand">{e(settings.APP_NAME)}</div><div class="muted">{'<br>'.join(seller)}</div></td>
       <td class="right"><div class="title">BILL</div>
@@ -151,11 +151,35 @@ def pdf(record: dict) -> bytes:
     </table>
     <p class="foot">This is a computer-generated bill and needs no signature.</p>
     """
+
+
+def pdf(record: dict) -> bytes:
+    """The one-page A4 PDF bill: attached to the mails and downloaded."""
     doc = pymupdf.open()
     page = doc.new_page(width=595, height=842)  # A4
-    page.insert_htmlbox(pymupdf.Rect(42, 42, 553, 800), html, css=_CSS)
+    page.insert_htmlbox(pymupdf.Rect(42, 42, 553, 800), _body(record), css=_CSS)
     doc.set_metadata({"title": f"Bill {record['invoice_number']}", "author": settings.INVOICE_SELLER_NAME,
                       "creator": settings.APP_NAME})
     data = doc.tobytes(garbage=3, deflate=True)
     doc.close()
     return data
+
+
+# On screen the bill sits on a sheet like the PDF; printed, it fills an A4 page with the browser's own margins
+_PAGE_CSS = """
+html { background: #eef1f5; }
+body { max-width: 680px; margin: 24px auto; padding: 44px 48px; background: #fff; box-shadow: 0 2px 14px rgba(15, 23, 42, .12); }
+@media screen and (max-width: 600px) { body { margin: 0; padding: 18px 14px; box-shadow: none; } .brand { font-size: 15pt; } }
+@page { size: A4; margin: 16mm; }
+@media print {
+  html { background: #fff; }
+  body { margin: 0; padding: 0; max-width: none; box-shadow: none; }
+  .test, .items th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+"""
+
+
+def html_page(record: dict) -> str:
+    """The same bill as a web page, to look at and print from the browser. Contains no scripts."""
+    return (f'<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Bill {escape(record["invoice_number"])}'
+            f'</title><style>{_CSS}{_PAGE_CSS}</style></head><body>{_body(record)}</body></html>')

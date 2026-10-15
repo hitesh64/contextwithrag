@@ -1118,13 +1118,36 @@ pages.users = async () => {
 
 const sharedActions = { ...actions };
 sharedActions['open-doc'] = el => openDocument(el.dataset.id, el.dataset.page);
-// The PDF bill of a paid registration fee (Payments for the platform owner, Users for the company's administrator)
-sharedActions.bill = el => attempt(async () => {
-  const response = await api(`/billing/payments/${el.dataset.id}/bill`, { raw: true });
+// The bill of a paid registration fee (Payments for the platform owner, Users for the company's administrator):
+// shown in the app first, then printed or downloaded as a PDF from there
+const downloadBill = id => attempt(async () => {
+  const response = await api(`/billing/payments/${id}/bill`, { raw: true });
   const name = /filename="?([^";]+)/i.exec(response.headers.get('content-disposition') || '');
   saveFile(await response.blob(), name ? name[1] : 'Bill.pdf');
 }, 'Bill downloaded');
-const billButton = p => `<button class="btn small" data-action="bill" data-id="${esc(p.id)}">${fa('file-invoice')}${p.invoice_number ? esc(p.invoice_number) : 'Bill'}</button>`;
+sharedActions.bill = el => attempt(async () => {
+  const id = el.dataset.id;
+  const html = await (await api(`/billing/payments/${id}/bill`, { params: { format: 'html' }, raw: true })).text();
+  const dialog = document.createElement('dialog');
+  dialog.className = 'bill-view';
+  dialog.innerHTML = `<div class="modal-header"><h2>${fa('file-invoice')}Bill ${esc(el.dataset.number || '')}</h2>
+      <button type="button" class="modal-close" data-close aria-label="Close">&times;</button></div>
+    <iframe class="bill-frame" title="Bill" sandbox="allow-same-origin allow-modals"></iframe>
+    <div class="modal-footer"><button type="button" class="btn" data-close>Close</button>
+      <button type="button" class="btn" data-download>${fa('download')}Download PDF</button>
+      <button type="button" class="btn primary" data-print>${fa('print')}Print</button></div>`;
+  document.body.append(dialog);
+  const frame = $('iframe', dialog);
+  // The page comes from this server and has no scripts; the sandbox keeps it that way
+  frame.srcdoc = html;
+  const close = () => { dialog.close(); dialog.remove(); };
+  dialog.querySelectorAll('[data-close]').forEach(button => { button.onclick = close; });
+  dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
+  $('[data-print]', dialog).onclick = () => { frame.contentWindow.focus(); frame.contentWindow.print(); };
+  $('[data-download]', dialog).onclick = () => downloadBill(id);
+  dialog.showModal();
+});
+const billButton = p => `<button class="btn small" data-action="bill" data-id="${esc(p.id)}" data-number="${esc(p.invoice_number || '')}" title="View, print or download the bill">${fa('eye')}${p.invoice_number ? esc(p.invoice_number) : 'View bill'}</button>`;
 
 function currentRoute() {
   const [path, search = ''] = location.hash.replace(/^#\/?/, '').split('?');

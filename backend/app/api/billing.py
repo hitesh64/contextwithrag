@@ -231,8 +231,12 @@ async def webhook(request: Request, x_razorpay_signature: str = Header("")):
 
 
 @router.get("/billing/payments/{record_id}/bill")
-def download_bill(record_id: str, user: dict = Depends(get_signed_in_user)):
-    """The PDF bill of a paid registration fee: for the platform owner, and for the paying company's administrator."""
+def download_bill(
+    record_id: str, format_: str = Query("pdf", alias="format", pattern="^(pdf|html)$"),
+    user: dict = Depends(get_signed_in_user),
+):
+    """The bill of a paid registration fee, for the platform owner and the paying company's administrator:
+    a PDF to download, or (format=html) a page to view and print in the browser."""
     record = payments.find_one({"_id": oid(record_id), "status": "paid"})
     allowed = record is not None and (
         is_platform_owner(user) or (user["role"] == "admin" and user["organization_id"] == record["organization_id"])
@@ -240,6 +244,10 @@ def download_bill(record_id: str, user: dict = Depends(get_signed_in_user)):
     if not allowed:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
     record = invoice.numbered(record)
+    if format_ == "html":
+        # Shown in a sandboxed frame of the app; nothing in it may run
+        return Response(invoice.html_page(record), media_type="text/html",
+                        headers={"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'"})
     return Response(invoice.pdf(record), media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{invoice.filename(record)}"'})
 

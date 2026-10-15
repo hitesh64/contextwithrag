@@ -404,3 +404,22 @@ def test_payment_from_before_bills_gets_its_number_on_first_download(client, gat
     assert response.status_code == 200
     stored = database.payments.find_one({"payment_id": record["payment_id"]})
     assert stored["invoice_number"].endswith("-00002") and stored["billed_to"]["company"] == "acme"
+
+
+def test_bill_can_be_viewed_as_a_printable_page(client, gateway, mails):
+    headers, record = pay(client, gateway, "acme")
+    page = client.get(f"{API}/billing/payments/{record['id']}/bill", headers=headers, params={"format": "html"})
+    assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
+    # Nothing in the page may run, even if a company name carried markup
+    assert "default-src 'none'" in page.headers["content-security-policy"]
+    for expected in (record["invoice_number"], "acme", "2,999.00", "Rupees Two Thousand Nine Hundred Ninety Nine Only", "@media print"):
+        assert expected in page.text, expected
+    assert "<script" not in page.text
+    assert client.get(f"{API}/billing/payments/{record['id']}/bill", headers=headers, params={"format": "doc"}).status_code == 422
+
+
+def test_company_name_is_escaped_on_the_bill(client, gateway, mails):
+    headers, record = pay(client, gateway, "acme")
+    database.payments.update_one({"payment_id": record["payment_id"]}, {"$set": {"billed_to.company": "<img src=x onerror=alert(1)>"}})
+    page = client.get(f"{API}/billing/payments/{record['id']}/bill", headers=headers, params={"format": "html"})
+    assert "<img src=x" not in page.text and "&lt;img src=x" in page.text
