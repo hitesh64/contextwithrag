@@ -1536,6 +1536,7 @@ function showApp() {
 }
 
 function signOut() {
+  resetLaunch();
   token = null;
   me = null;
   chatLog.length = 0;
@@ -1546,12 +1547,72 @@ function signOut() {
   showSwipe(true);
 }
 
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+/** After a successful sign-in: a check that draws itself, the user's name and factory, three steps ticking off
+ *  and a filling bar, then the card lifts away and the app fades in. About two seconds; a moment with reduced motion. */
+async function playLaunch() {
+  const card = $('#auth .auth-card');
+  const steps = [...$('#launch-steps').children];
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const pending = me.organization_status !== 'active';
+  const labels = ['Identity verified',
+    me.platform_owner ? 'Platform console ready' : 'Factory workspace ready',
+    pending ? 'Opening registration payment' : me.platform_owner ? 'Opening the console' : 'Opening your dashboard'];
+  steps.forEach((step, i) => { step.className = ''; step.lastElementChild.textContent = labels[i]; });
+  $('#launch-kicker').textContent = pending ? 'Account created' : 'Signed in';
+  $('#launch-name').textContent = `Welcome, ${me.name.trim().split(/\s+/)[0]}`;
+  $('#launch-org').textContent = me.platform_owner ? '' : me.organization_name;
+  $('#launch-fill').style.width = '0';
+  $('#launch-burst').innerHTML = Array.from({ length: 14 }, (_, i) =>
+    `<i style="--a:${i * (360 / 14)}deg;--c:${['#60a5fa', '#e3c27f', '#e2e8f0'][i % 3]}"></i>`).join('');
+  card.classList.add('launching');
+  $('#auth-launch').hidden = false;
+  if (still) {
+    steps.forEach(step => step.classList.add('done'));
+    $('#launch-fill').style.width = '100%';
+    await wait(700);
+    return;
+  }
+  // Each step: working for a moment, then done; the bar follows the steps
+  const timing = [[450, 300], [0, 380], [0, 520]];
+  for (const [i, [before, working]] of timing.entries()) {
+    await wait(before);
+    steps[i].classList.add('active');
+    await wait(working);
+    steps[i].classList.replace('active', 'done');
+    $('#launch-fill').style.width = `${((i + 1) / steps.length) * 100}%`;
+  }
+  await wait(380);
+  $('#auth').classList.add('leaving');
+  await wait(380);
+}
+
+/** Put the sign-in card back as it was, for the next time it is shown. */
+function resetLaunch() {
+  $('#auth .auth-card').classList.remove('launching');
+  $('#auth').classList.remove('leaving');
+  $('#auth-launch').hidden = true;
+  $('#launch-burst').innerHTML = '';
+}
+
+/** Show the app after the hand-over, with a short fade in. */
+async function enterApp() {
+  await playLaunch();
+  showApp();
+  resetLaunch();
+  const app = $('#app');
+  app.classList.remove('entering');
+  void app.offsetWidth;
+  app.classList.add('entering');
+}
+
 async function signIn(email, password) {
   const result = await api('/auth/login', { method: 'POST', body: { email, password } });
   token = result.access_token;
   me = result.user;
   sessionStorage.setItem('token', token);
-  showApp();
+  await enterApp();
 }
 
 /** One form of the signed-out card: login, register, forgot (ask for a reset link) or reset (the new password). */
@@ -1605,11 +1666,14 @@ function checkNewPassword(password) {
   if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) throw new Error('Use at least one letter and one number in the password.');
 }
 
-function authForm(selector, handler) {
+function authForm(selector, handler, busyText = 'Please wait…') {
   $(selector).onsubmit = async event => {
     event.preventDefault();
     const button = $('button[type=submit]', event.target);
+    const label = button.innerHTML;
     button.disabled = true;
+    button.classList.add('busy');
+    button.innerHTML = `<span class="spin" aria-hidden="true"></span>${busyText}`;
     $('#auth-error').textContent = '';
     $('#auth-ok').textContent = '';
     try {
@@ -1617,15 +1681,21 @@ function authForm(selector, handler) {
       event.target.reset();
     } catch (error) {
       $('#auth-error').textContent = error.message;
+      const card = event.target.closest('.auth-card');
+      card.classList.remove('shake');
+      void card.offsetWidth; // restart the shake on a second wrong try
+      card.classList.add('shake');
     }
+    button.classList.remove('busy');
+    button.innerHTML = label;
     button.disabled = false;
   };
 }
-authForm('#login-form', values => signIn(values.email, values.password));
+authForm('#login-form', values => signIn(values.email, values.password), 'Verifying…');
 authForm('#forgot-form', async values => {
   const { detail } = await api('/auth/forgot-password', { method: 'POST', body: values });
   $('#auth-ok').textContent = detail;
-});
+}, 'Sending…');
 authForm('#reset-form', async values => {
   if (!resetToken) throw new Error('Open the link from the mail again, or ask for a new one with "Forgot password".');
   checkNewPassword(values.password);
@@ -1634,7 +1704,7 @@ authForm('#reset-form', async values => {
   resetToken = null;
   showAuthView('login');
   $('#auth-ok').textContent = detail;
-});
+}, 'Saving…');
 authForm('#register-form', async values => {
   const { logo, ...account } = values;
   checkNewPassword(account.password);
@@ -1651,8 +1721,8 @@ authForm('#register-form', async values => {
     await attempt(() => api('/organization/logo', { method: 'PUT', form }));
   }
   me = await api('/auth/me');
-  showApp();
-});
+  await enterApp();
+}, 'Creating workspace…');
 
 // Registration form: preview of the chosen logo, and the fee that follows
 $('#register-logo').onchange = event => {
