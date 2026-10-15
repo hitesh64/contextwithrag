@@ -102,25 +102,14 @@
 
   <!-- Signed in -->
   <div id="app" class="app" hidden>
-    <!-- Top bar: flat, one row. Brand, where you are (factory / page), search, the plant's shift. -->
+    <!-- Top bar: flat, one row. One mark (the company logo, or the product name), search, the plant's shift. -->
     <header class="hdr" id="hdr">
       <button class="hamburger" id="menu-open" type="button" aria-label="Open menu" aria-controls="sidebar"><i class="fa-solid fa-bars"></i></button>
 
       <a class="hdr-logo" id="hdr-logo" href="#/dashboard" hidden><img alt=""></a>
       <a class="hdr-brand" href="#/dashboard" aria-label="ContextBasedRAG: dashboard">
-        <span class="hdr-mark" aria-hidden="true"><i class="fa-solid fa-gears"></i></span>
         <span class="wordmark">ContextBasedRAG</span>
       </a>
-
-      <nav class="hdr-crumbs" aria-label="Breadcrumb">
-        <a class="hdr-chip" href="#/dashboard" title="Open the dashboard of this factory">
-          <i class="fa-solid fa-industry" id="chip-icon"></i><img class="chip-logo" id="chip-logo" alt="" hidden>
-          <span class="chip-label">Factory</span>
-          <b id="org-name"></b>
-        </a>
-        <i class="fa-solid fa-chevron-right crumb-sep" aria-hidden="true"></i>
-        <span class="crumb-page" id="hdr-page" aria-current="page"></span>
-      </nav>
 
       <form class="hdr-search" id="hdr-search" role="search">
         <i class="fa-solid fa-magnifying-glass"></i>

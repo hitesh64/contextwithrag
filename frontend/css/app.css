@@ -134,7 +134,8 @@ code { color: var(--brand-ink); }
 
 /* ───────── 4. Header: flat top bar ───────── */
 /* After the UI-shell pattern (one flat row, one hairline) and control-room practice (ISA-101): neutral surface,
-   colour only where it carries status. Brand, then where you are, then search, then the plant's shift. */
+   colour only where it carries status. One mark on the left (company logo, else the product name), nothing the
+   page already says, then search and the plant's shift on the right. */
 .hdr {
   position: fixed; top: 0; left: 0; right: 0; z-index: 50;
   height: var(--hdr-h);
@@ -149,29 +150,11 @@ code { color: var(--brand-ink); }
   display: flex; align-items: center; gap: 10px;
   text-decoration: none; border-right: 1px solid var(--line-soft);
 }
-.app.rail .hdr-brand { width: auto; }
 .hdr-brand:hover { text-decoration: none; }
-.hdr-mark {
-  flex: none; width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center;
-  font-size: 14px; color: #fff; background: var(--brand-hover);
-}
-.wordmark { font-size: 16px; font-weight: 700; line-height: 1; letter-spacing: -0.01em; white-space: nowrap; color: var(--ink-strong); }
+/* With the menu collapsed to icons, the mark keeps its own width instead of the full menu width */
+@media (min-width: 981px) { .app.rail .hdr-brand, .app.rail .hdr-logo { width: auto; } }
+.wordmark { font-size: 17px; font-weight: 700; line-height: 1; letter-spacing: -0.015em; white-space: nowrap; color: var(--ink-strong); }
 .hdr-brand:hover .wordmark { color: #fff; }
-
-/* Where you are: factory, then the page */
-.hdr-crumbs { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 20px; font-size: 13px; }
-.hdr-chip {
-  min-width: 0; display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin-left: -8px; border-radius: 6px;
-  color: var(--ink); text-decoration: none; transition: background .15s ease;
-}
-.hdr-chip:hover { text-decoration: none; color: var(--ink-strong); background: rgba(148, 163, 184, .08); }
-.hdr-chip:focus-visible { outline: 2px solid var(--indigo); outline-offset: 0; }
-.hdr-chip > i { color: var(--ink-mute); font-size: 13px; }
-.chip-label { font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-mute); flex: none; }
-.hdr-chip b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.crumb-sep { flex: none; font-size: 9px; color: var(--ink-mute); }
-.crumb-page { white-space: nowrap; font-weight: 600; color: var(--ink-strong); }
-.crumb-page:empty, .hdr-crumbs:has(.crumb-page:empty) .crumb-sep { display: none; }
 
 /* Search */
 .hdr-search {
@@ -876,18 +859,17 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
 @keyframes tick-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
 /* ───────── Company logo ───────── */
-/* Header logo: white marks straight on the dark bar (see headerLogo in app.js), a hairline before the brand */
+/* Header logo: white marks straight on the dark bar (see headerLogo in app.js). It takes the brand's place. */
 .hdr-logo {
-  flex: none; height: 100%; max-width: 170px; padding: 0 14px 0 16px;
-  display: grid; place-items: center; border-right: 1px solid var(--line-soft);
+  flex: none; width: var(--sidebar-width); height: 100%; padding: 0 16px;
+  display: flex; align-items: center; border-right: 1px solid var(--line-soft);
 }
 .hdr-logo img {
   max-height: 30px; max-width: 100%; object-fit: contain; display: block;
 }
 /* A photograph used as the logo: kept as it is, framed */
 .hdr-logo.photo img { height: 30px; border-radius: 6px; box-shadow: 0 0 0 1px var(--border); }
-.hdr-logo:not([hidden]) + .hdr-brand { width: auto; }
-.chip-logo { flex: none; width: 18px; height: 18px; object-fit: contain; border-radius: 4px; }
+.hdr-logo:not([hidden]) + .hdr-brand { display: none; }
 .org-initial {
   display: grid; place-items: center; color: #fff; font-weight: 800;
   background: linear-gradient(135deg, var(--indigo), var(--violet));
@@ -1054,8 +1036,7 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
   .app { display: block; width: auto; height: auto; min-height: 100vh; overflow: visible; }
   .hdr { position: sticky; height: auto; flex-wrap: wrap; row-gap: 10px; padding: 10px 12px; }
   .hdr-brand { width: auto; height: auto; padding: 0 0 0 10px; border: 0; }
-  .hdr-logo { height: 36px; padding: 0 0 0 10px; border: 0; }
-  .hdr-crumbs { flex: 1 1 auto; padding: 0 0 0 14px; justify-content: flex-end; }
+  .hdr-logo { width: auto; height: 36px; padding: 0 0 0 10px; border: 0; }
   .hdr-shift { display: none; }
   .hdr-search { flex: 1 1 100%; margin-left: 0; }
   .hdr-search kbd { display: none; }
@@ -1088,7 +1069,6 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
   .page-head .btn, .page-head .actions { width: 100%; }
   .page-head .actions .btn { flex: 1 1 auto; }
   .filters label { flex: 1 1 100%; }
-  .hdr-crumbs { display: none; }
   .auth-card { padding: 36px 22px; }
   .modal-header, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; }
 }

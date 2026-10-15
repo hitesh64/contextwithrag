@@ -1196,7 +1196,6 @@ const drawLatest = latestOnly(draw);
 function route() {
   const { entry } = currentRoute();
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('active', a.dataset.page === entry[0]));
-  $('#hdr-page').textContent = entry[1];
   return drawLatest();
 }
 
@@ -1345,8 +1344,6 @@ function showLogos() {
         box.hidden = false;
       });
   }
-  $('#chip-icon').hidden = Boolean(url);
-  setImage($('#chip-logo'), url);
   setImage($('#pay-logo'), url);
 }
 
@@ -1518,8 +1515,6 @@ function showApp() {
   $('#auth').hidden = true;
   $('#pay').hidden = true;
   $('#app').hidden = false;
-  $('#org-name').textContent = me.platform_owner ? 'Platform owner' : me.organization_name;
-  $('.chip-label').textContent = me.platform_owner ? 'Console' : 'Factory';
   $('#hdr-search').hidden = me.platform_owner;
   showLogos();
   $('#who-name').textContent = me.name;
@@ -1534,8 +1529,8 @@ function showApp() {
   if (can('dashboard.view')) api('/dashboard', { params: { days: 30 } }).then(navBadges).catch(() => {});
   // An address left behind by whoever used this browser before may be a section this user cannot see
   const first = NAV.find(n => can(n[2]));
-  // The header's brand and chip lead to this user's first section: the dashboard, or the owner's Companies
-  document.querySelectorAll('.hdr-brand, .hdr-chip, #hdr-logo').forEach(a => { a.href = `#/${first ? first[0] : 'dashboard'}`; });
+  // The header's mark leads to this user's first section: the dashboard, or the owner's Companies
+  document.querySelectorAll('.hdr-brand, #hdr-logo').forEach(a => { a.href = `#/${first ? first[0] : 'dashboard'}`; });
   if (first && !can(currentRoute().entry[2])) location.hash = `#/${first[0]}`;
   route();
 }
