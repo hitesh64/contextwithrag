@@ -51,7 +51,7 @@
   --ease: cubic-bezier(.25, .8, .25, 1);
   --spring: cubic-bezier(.34, 1.56, .64, 1);
 
-  --hdr-h: 56px;
+  --hdr-h: 64px;
   --sidebar-width: 210px;
   --rail-width: 66px;
   /* The signed-in app is drawn at 80% on desktop (see .app). */
@@ -155,6 +155,22 @@ code { color: var(--brand-ink); }
 @media (min-width: 981px) { .app.rail .hdr-brand, .app.rail .hdr-logo { width: auto; } }
 .wordmark { font-size: 17px; font-weight: 700; line-height: 1; letter-spacing: -0.015em; white-space: nowrap; color: var(--ink-strong); }
 .hdr-brand:hover .wordmark { color: #fff; }
+
+/* Photo strip: pictures only, a slow cross-fade with a slight drift, edges dissolving into the bar */
+.hdr-banner {
+  position: relative; flex: 1 1 auto; min-width: 0; max-width: 760px; height: 46px; margin: 0 24px;
+  border-radius: 8px; overflow: hidden; background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.hdr-banner img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;
+  opacity: 0; filter: saturate(.75) brightness(.8) contrast(1.05);
+  transform: scale(1.04); transition: opacity 1.4s ease, transform 8s linear;
+}
+.hdr-banner img.on { opacity: 1; transform: scale(1.12); }
+.hdr-banner + .hdr-search { margin-left: 0; }
 
 /* Search */
 .hdr-search {
@@ -1037,7 +1053,7 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
   .hdr { position: sticky; height: auto; flex-wrap: wrap; row-gap: 10px; padding: 10px 12px; }
   .hdr-brand { width: auto; height: auto; padding: 0 0 0 10px; border: 0; }
   .hdr-logo { width: auto; height: 36px; padding: 0 0 0 10px; border: 0; }
-  .hdr-shift { display: none; }
+  .hdr-shift, .hdr-banner { display: none; }
   .hdr-search { flex: 1 1 100%; margin-left: 0; }
   .hdr-search kbd { display: none; }
   .hamburger {

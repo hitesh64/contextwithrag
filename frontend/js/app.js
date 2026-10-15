@@ -1733,6 +1733,20 @@ $('#hdr-search').onsubmit = event => {
   $('#hdr-search-input').blur();
 };
 
+// Header photo strip: the next picture every 7 s, held while the pointer is over it or the tab is hidden.
+// With reduced motion the first picture simply stays.
+{
+  const strip = $('#hdr-banner');
+  const photos = [...strip.querySelectorAll('img')];
+  let shown = 0;
+  setInterval(() => {
+    if (document.hidden || strip.matches(':hover') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    photos[shown].classList.remove('on');
+    shown = (shown + 1) % photos.length;
+    photos[shown].classList.add('on');
+  }, 7000);
+}
+
 // Shift clock: three 8-hour shifts, A 06:00, B 14:00, C 22:00
 const SHIFTS = [['A', 'Morning', 6], ['B', 'Evening', 14], ['C', 'Night', 22]];
 function currentShift(now = new Date()) {

@@ -102,7 +102,7 @@
 
   <!-- Signed in -->
   <div id="app" class="app" hidden>
-    <!-- Top bar: flat, one row. One mark (the company logo, or the product name), search, the plant's shift. -->
+    <!-- Top bar: flat, one row. One mark (the company logo, or the product name), a photo strip, search, the plant's shift. -->
     <header class="hdr" id="hdr">
       <button class="hamburger" id="menu-open" type="button" aria-label="Open menu" aria-controls="sidebar"><i class="fa-solid fa-bars"></i></button>
 
@@ -110,6 +110,14 @@
       <a class="hdr-brand" href="#/dashboard" aria-label="ContextBasedRAG: dashboard">
         <span class="wordmark">ContextBasedRAG</span>
       </a>
+
+      <!-- Photo strip, pictures only (Pexels photos, free licence; see frontend/img/banner/CREDITS.txt). Rotation: app.js -->
+      <div class="hdr-banner" id="hdr-banner" aria-hidden="true">
+        <img class="on" src="/static/img/banner/slide-1.jpg" alt="">
+        <img src="/static/img/banner/slide-2.jpg" alt="" loading="lazy">
+        <img src="/static/img/banner/slide-3.jpg" alt="" loading="lazy">
+        <img src="/static/img/banner/slide-4.jpg" alt="" loading="lazy">
+      </div>
 
       <form class="hdr-search" id="hdr-search" role="search">
         <i class="fa-solid fa-magnifying-glass"></i>
