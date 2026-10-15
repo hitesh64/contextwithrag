@@ -102,76 +102,39 @@
 
   <!-- Signed in -->
   <div id="app" class="app" hidden>
+    <!-- Top bar: flat, one row. Brand, where you are (factory / page), search, the plant's shift. -->
     <header class="hdr" id="hdr">
-      <div class="hdr-deco" aria-hidden="true">
-        <span class="aurora aurora-1"></span><span class="aurora aurora-2"></span><span class="aurora aurora-3"></span>
-        <span class="hdr-grid"></span>
-        <span class="spotlight" id="spotlight"></span>
-      </div>
-
       <button class="hamburger" id="menu-open" type="button" aria-label="Open menu" aria-controls="sidebar"><i class="fa-solid fa-bars"></i></button>
 
       <a class="hdr-logo" id="hdr-logo" href="#/dashboard" hidden><img alt=""></a>
-
       <a class="hdr-brand" href="#/dashboard" aria-label="ContextBasedRAG: dashboard">
+        <span class="hdr-mark" aria-hidden="true"><i class="fa-solid fa-gears"></i></span>
         <span class="wordmark">ContextBasedRAG</span>
-        <span class="hdr-sub">Factory maintenance intelligence</span>
       </a>
 
-      <!-- Photo banner (Pexels photos, free licence; see frontend/img/banner/CREDITS.txt). Rotation: app.js -->
-      <section class="hdr-banner" id="hdr-banner" aria-roledescription="carousel" aria-label="ContextBasedRAG">
-        <div class="banner-track" id="banner-track">
-          <figure class="banner-slide on" aria-roledescription="slide" aria-label="1 of 4">
-            <img src="/static/img/banner/slide-1.jpg" alt="Rows of production machines on a factory floor">
-            <figcaption><span class="slide-kicker">Plant floor</span><span class="slide-title">Every machine. Every manual. One answer.</span></figcaption>
-          </figure>
-          <figure class="banner-slide" aria-roledescription="slide" aria-label="2 of 4">
-            <img src="/static/img/banner/slide-2.jpg" alt="A CNC tool machining a steel part" loading="lazy">
-            <figcaption><span class="slide-kicker">Precision</span><span class="slide-title">Maintenance backed by your own records.</span></figcaption>
-          </figure>
-          <figure class="banner-slide" aria-roledescription="slide" aria-label="3 of 4">
-            <img src="/static/img/banner/slide-3.jpg" alt="Copper lines and steel parts of an industrial machine" loading="lazy">
-            <figcaption><span class="slide-kicker">Reliability</span><span class="slide-title">Know the fix before the breakdown spreads.</span></figcaption>
-          </figure>
-          <figure class="banner-slide" aria-roledescription="slide" aria-label="4 of 4">
-            <img src="/static/img/banner/slide-4.jpg" alt="A technician at the control panel of a machine" loading="lazy">
-            <figcaption><span class="slide-kicker">People</span><span class="slide-title">Your team's know-how, kept and searchable.</span></figcaption>
-          </figure>
-        </div>
-        <div class="banner-foot">
-          <span class="banner-count" id="banner-count">01 / 04</span>
-          <div class="banner-bars" id="banner-bars">
-            <button type="button" aria-label="Show slide 1"></button><button type="button" aria-label="Show slide 2"></button>
-            <button type="button" aria-label="Show slide 3"></button><button type="button" aria-label="Show slide 4"></button>
-          </div>
-        </div>
-        <button class="banner-nav prev" id="banner-prev" type="button" aria-label="Previous slide"><i class="fa-solid fa-chevron-left"></i></button>
-        <button class="banner-nav next" id="banner-next" type="button" aria-label="Next slide"><i class="fa-solid fa-chevron-right"></i></button>
-      </section>
-
-      <div class="hdr-controls">
-        <form class="hdr-field hdr-search" id="hdr-search" role="search">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <input id="hdr-search-input" name="q" type="search" placeholder="Search assets…" aria-label="Search assets" autocomplete="off">
-          <kbd>Ctrl K</kbd>
-        </form>
-        <a class="hdr-field hdr-chip" href="#/dashboard" title="Open the dashboard of this factory">
-          <i class="fa-solid fa-folder-open" id="chip-icon"></i><img class="chip-logo" id="chip-logo" alt="" hidden>
+      <nav class="hdr-crumbs" aria-label="Breadcrumb">
+        <a class="hdr-chip" href="#/dashboard" title="Open the dashboard of this factory">
+          <i class="fa-solid fa-industry" id="chip-icon"></i><img class="chip-logo" id="chip-logo" alt="" hidden>
           <span class="chip-label">Factory</span>
           <b id="org-name"></b>
-          <i class="fa-solid fa-arrow-right chip-arrow"></i>
         </a>
-      </div>
+        <i class="fa-solid fa-chevron-right crumb-sep" aria-hidden="true"></i>
+        <span class="crumb-page" id="hdr-page" aria-current="page"></span>
+      </nav>
+
+      <form class="hdr-search" id="hdr-search" role="search">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input id="hdr-search-input" name="q" type="search" placeholder="Search assets…" aria-label="Search assets" autocomplete="off">
+        <kbd>Ctrl K</kbd>
+      </form>
 
       <!-- Shift clock: the plant's three shifts, the time left in the current one -->
       <div class="hdr-shift" id="hdr-shift" title="Shift A 06:00–14:00 · Shift B 14:00–22:00 · Shift C 22:00–06:00">
         <div class="shift-top"><span class="shift-live" aria-hidden="true"></span><span id="shift-name">Shift</span></div>
-        <div class="shift-time" id="shift-time">--:--</div>
+        <div class="shift-row"><b class="shift-time" id="shift-time">--:--</b><span class="shift-left" id="shift-left"></span></div>
         <div class="shift-meter" aria-hidden="true"><span id="shift-fill"></span></div>
-        <div class="shift-left" id="shift-left"></div>
       </div>
     </header>
-    <div class="drl drl-h" aria-hidden="true"></div>
 
     <aside class="sidebar" id="sidebar">
       <div class="side-top">
@@ -186,7 +149,6 @@
         </div>
         <button class="icon-btn" id="sign-out" type="button" aria-label="Sign out" title="Sign out"><i class="fa-solid fa-right-from-bracket"></i></button>
       </div>
-      <div class="drl drl-v" aria-hidden="true"></div>
     </aside>
     <div class="drawer-backdrop" id="drawer-backdrop"></div>
 
