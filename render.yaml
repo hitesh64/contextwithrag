@@ -7,7 +7,9 @@ services:
     plan: free
     region: singapore
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    # Behind Render's proxy: take the visitor's address from X-Forwarded-For, or every visitor would share the
+    # proxy's address and its per-address limits on sign-in, sign-up and password reset
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
     healthCheckPath: /health
     autoDeploy: true
     envVars:

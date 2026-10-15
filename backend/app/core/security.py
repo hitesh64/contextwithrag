@@ -1,7 +1,8 @@
 """Authentication (bcrypt + server-side login sessions), roles and per-user permissions.
 
 On login the server creates a random token and stores only its SHA-256 hash in MongoDB with
-an expiry. Logging out or deactivating a user invalidates the token immediately.
+an expiry. Logging out or deactivating a user invalidates the token immediately. The one-time
+links of "forgot password" work the same way.
 
 The organization a request may touch always comes from the logged-in user's own record,
 never from anything the browser sends.
@@ -16,7 +17,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .config import settings
-from .database import login_sessions, organizations, users
+from .database import login_sessions, organizations, password_resets, users
 from .utils import now
 
 bearer = HTTPBearer(auto_error=False)
@@ -59,6 +60,33 @@ def revoke_token(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -
 
 def revoke_user_tokens(user_id: str) -> None:
     login_sessions.delete_many({"user_id": user_id})
+
+
+def create_password_reset(user_id: str) -> str:
+    """A one-time token for the link in a "forgot password" mail. An earlier link of the same user stops working."""
+    password_resets.delete_many({"user_id": user_id})
+    token = secrets.token_urlsafe(32)
+    created = now()
+    password_resets.insert_one({
+        "token_hash": _token_hash(token),
+        "user_id": user_id,
+        "created_at": created,
+        "expires_at": created + timedelta(minutes=settings.PASSWORD_RESET_MINUTES),
+    })
+    return token
+
+
+def password_reset_user(token: str) -> dict | None:
+    """The active user a reset token was made for, while the token is unused and not expired; otherwise None."""
+    reset = password_resets.find_one({"token_hash": _token_hash(token)})
+    # MongoDB removes expired records only about once a minute, so the time is checked here too
+    if reset is None or reset["expires_at"] <= now():
+        return None
+    user = users.find_one({"_id": ObjectId(reset["user_id"])})
+    if user is None or not user.get("is_active", True):
+        return None
+    user["id"] = str(user["_id"])
+    return user
 
 
 def get_signed_in_user(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:

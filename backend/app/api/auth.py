@@ -1,23 +1,29 @@
-"""Sign-up of a factory, login, and the administrator's user management."""
+"""Sign-up of a factory, login, a forgotten password, and the administrator's user management."""
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pymongo.errors import DuplicateKeyError
 
 from ..core.config import settings
-from ..core.database import organizations, users
+from ..core.database import organizations, password_resets, users
 from ..core.security import (
-    PERMISSIONS, ROLES, create_access_token, get_signed_in_user, hash_password, is_platform_owner, permissions_of,
-    require_role, revoke_token, revoke_user_tokens, role_permissions, verify_password, with_implied,
+    PERMISSIONS, ROLES, create_access_token, create_password_reset, get_signed_in_user, hash_password,
+    is_platform_owner, password_reset_user, permissions_of, require_role, revoke_token, revoke_user_tokens,
+    role_permissions, verify_password, with_implied,
 )
 from ..core.utils import RateLimiter, clean, now, oid, paginate
-from ..schemas import LoginIn, RegisterIn, UserCreate, UserUpdate
-from ..services import audit_service, razorpay
+from ..schemas import ForgotPasswordIn, LoginIn, RegisterIn, ResetPasswordIn, ResetTokenIn, UserCreate, UserUpdate
+from ..services import audit_service, mailer, razorpay
 from .organization import logo_url
 
 router = APIRouter(tags=["auth"])
 login_limiter = RateLimiter(settings.LOGIN_RATE_PER_MINUTE)
+address_limiter = RateLimiter(settings.LOGIN_RATE_PER_MINUTE * 5)
 
 # Compared against when the email is unknown, so a wrong email takes as long as a wrong password
 _DUMMY_HASH = hash_password("not-a-real-password")
+
+
+def _client(request: Request) -> str:
+    return request.client.host if request.client else ""
 
 
 def _with_access(out: dict) -> dict:
@@ -75,7 +81,7 @@ def register(body: RegisterIn, request: Request, response: Response):
 
     Registering again with the email and password of a company that has not paid yet continues that registration,
     so an unfinished sign-up never forces a second company."""
-    login_limiter.check(f"register:{request.client.host if request.client else ''}")
+    login_limiter.check(f"register:{_client(request)}")
     existing = users.find_one({"email": body.email.lower()})
     if existing:
         org = organizations.find_one({"_id": oid(existing["organization_id"])}, {"status": 1})
@@ -108,13 +114,68 @@ def register(body: RegisterIn, request: Request, response: Response):
 
 @router.post("/auth/login")
 def login(body: LoginIn, request: Request):
-    login_limiter.check(f"login:{request.client.host if request.client else ''}:{body.email.lower()}")
+    login_limiter.check(f"login:{_client(request)}:{body.email.lower()}")
+    # Also per address across all emails, against one password tried on many accounts; a whole factory may share it
+    address_limiter.check(f"login:{_client(request)}")
     user = users.find_one({"email": body.email.lower()})
     if not verify_password(body.password, user["password_hash"] if user else _DUMMY_HASH) or user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong email or password.")
     if not user.get("is_active", True):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Account is deactivated")
     return {"access_token": create_access_token(str(user["_id"])), "token_type": "bearer", "user": _user_out(user)}
+
+
+_BAD_RESET_LINK = "This link is invalid, already used or expired. Ask for a new one with \"Forgot password\"."
+
+
+@router.post("/auth/forgot-password")
+def forgot_password(body: ForgotPasswordIn, request: Request):
+    """Mail a link for setting a new password. The answer is the same whether or not the email is registered,
+    so nobody can find out here who has an account."""
+    email = body.email.lower()
+    login_limiter.check(f"forgot:{_client(request)}")
+    login_limiter.check(f"forgot:{email}")
+    if not mailer.configured():
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
+                            "Password reset by email is not set up on this server. Contact your administrator.")
+    user = users.find_one({"email": email})
+    if user and user.get("is_active", True):
+        token = create_password_reset(str(user["_id"]))
+        mailer.password_reset_link(user, f"{settings.APP_BASE_URL}/#/reset-password?token={token}")
+    return {
+        "detail": f"If {email} has an account, a link to set a new password is on its way. "
+                  f"It works once, for {settings.PASSWORD_RESET_MINUTES} minutes. Check the spam folder too.",
+    }
+
+
+@router.post("/auth/reset-password/check")
+def check_reset_link(body: ResetTokenIn, request: Request):
+    """Whether a reset link can still be used, and for which account, before the new password is typed."""
+    login_limiter.check(f"reset:{_client(request)}")
+    user = password_reset_user(body.token)
+    if user is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _BAD_RESET_LINK)
+    return {"email": user["email"], "name": user["name"]}
+
+
+@router.post("/auth/reset-password")
+def reset_password(body: ResetPasswordIn, request: Request):
+    """Store the new password, end every login of the account, and confirm the change by mail."""
+    login_limiter.check(f"reset:{_client(request)}")
+    if body.password != body.confirm_password:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "The two passwords do not match.")
+    user = password_reset_user(body.token)
+    if user is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _BAD_RESET_LINK)
+    changed = now()
+    users.update_one({"_id": user["_id"]}, {"$set": {"password_hash": hash_password(body.password),
+                                                     "password_changed_at": changed}})
+    # The link works once; and whoever knew the old password is signed out everywhere
+    password_resets.delete_many({"user_id": user["id"]})
+    revoke_user_tokens(user["id"])
+    audit_service.record(user, "user.password_reset", "user", user["id"], detail="new password set through the emailed link")
+    mailer.password_changed(user, changed)
+    return {"detail": "Your new password is saved. Sign in with it."}
 
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)

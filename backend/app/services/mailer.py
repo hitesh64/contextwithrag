@@ -120,3 +120,31 @@ def payment_failed(org: dict, admin: dict | None, record: dict, payment_id: str,
             f"{facts}{_admin_line(admin)}\n"
             f"Payments page: {settings.APP_BASE_URL}/#/payments\n",
         )
+
+
+def password_reset_link(user: dict, link: str) -> None:
+    """The "forgot password" mail: a one-time link to the form for the new password."""
+    send(
+        user["email"],
+        f"Set a new password for {settings.APP_NAME}",
+        f"Hello {user['name']},\n\n"
+        f"Someone asked to set a new password for your {settings.APP_NAME} account ({user['email']}).\n\n"
+        f"Open this link to choose the new password:\n{link}\n\n"
+        f"The link works once, for {settings.PASSWORD_RESET_MINUTES} minutes.\n"
+        "If you did not ask for this, ignore this mail: your password stays as it is.\n\n"
+        f"- {settings.APP_NAME}\n",
+    )
+
+
+def password_changed(user: dict, changed_at) -> None:
+    """Confirmation after a new password was set through the emailed link."""
+    send(
+        user["email"],
+        f"Your {settings.APP_NAME} password was changed",
+        f"Hello {user['name']},\n\n"
+        f"Your new password was set successfully on {_when(changed_at)}.\n"
+        "Every device that was signed in to your account has been signed out.\n\n"
+        f"Sign in with the new password: {settings.APP_BASE_URL}/\n\n"
+        "If you did not change it, use \"Forgot password\" on the sign-in page at once and tell your administrator.\n\n"
+        f"- {settings.APP_NAME}\n",
+    )

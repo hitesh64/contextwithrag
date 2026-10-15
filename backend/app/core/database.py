@@ -15,6 +15,8 @@ db = client[settings.MONGO_DB]
 organizations = db["organizations"]
 users = db["users"]
 login_sessions = db["login_sessions"]
+# One-time links for setting a new password; only the SHA-256 hash of the token is kept
+password_resets = db["password_resets"]
 assets = db["assets"]
 documents = db["documents"]
 breakdowns = db["breakdowns"]
@@ -36,6 +38,8 @@ def init_db() -> None:
     login_sessions.create_index("token_hash", unique=True)
     # Expired logins are removed by MongoDB at their expires_at time
     login_sessions.create_index("expires_at", expireAfterSeconds=0)
+    password_resets.create_index("token_hash", unique=True)
+    password_resets.create_index("expires_at", expireAfterSeconds=0)
     assets.create_index([("organization_id", ASCENDING), ("asset_code", ASCENDING)], unique=True)
     documents.create_index([("organization_id", ASCENDING), ("created_at", DESCENDING)])
     documents.create_index([("organization_id", ASCENDING), ("file_hash", ASCENDING)])

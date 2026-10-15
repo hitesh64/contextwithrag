@@ -36,6 +36,8 @@ class Settings:
     REINDEX_ON_START = _flag("REINDEX_ON_START")
 
     LOGIN_EXPIRE_MINUTES = int(os.getenv("LOGIN_EXPIRE_MINUTES", "720"))
+    # How long the link in a "forgot password" mail can be used
+    PASSWORD_RESET_MINUTES = int(os.getenv("PASSWORD_RESET_MINUTES", "30"))
     # A file kept in MongoDB must fit in one record (16 MB)
     MAX_UPLOAD_MB = min(int(os.getenv("MAX_UPLOAD_MB", "10")), 15 if FILE_STORE == "database" else 10_000)
     # Largest document (in chunks of ~1200 characters) that is indexed; bounds embedding cost

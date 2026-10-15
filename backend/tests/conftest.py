@@ -84,6 +84,7 @@ def clean_state(client, monkeypatch):
     shutil.rmtree(os.environ["STORAGE_DIR"], ignore_errors=True)
     os.makedirs(os.environ["STORAGE_DIR"])
     auth.login_limiter.reset()
+    auth.address_limiter.reset()
     chat.ai_limiter.reset()
     monkeypatch.setattr(llm, "embed", fake_embed)
 

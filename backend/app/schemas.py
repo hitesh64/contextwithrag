@@ -1,9 +1,10 @@
 """Request bodies. Unknown fields are rejected, so a browser cannot slip in organization_id or status."""
 import re
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic_core import PydanticCustomError
 
 Role = Literal["viewer", "technician", "maintenance_manager", "admin"]
 Criticality = Literal["low", "medium", "high", "critical"]
@@ -15,6 +16,19 @@ DocType = Literal["manual", "sop", "spare_parts", "other"]
 ASSET_CODE_PATTERN = r"^[A-Z0-9][A-Z0-9\-_/]{1,29}$"
 
 
+def _strong_enough(password: str) -> str:
+    """The rule for every new password. Existing passwords are not checked again at login."""
+    if not (re.search(r"[A-Za-z]", password) and re.search(r"\d", password)):
+        raise PydanticCustomError("weak_password", "Use at least one letter and one number in the password.")
+    # bcrypt reads only the first 72 bytes, and refuses longer input outright
+    if len(password.encode()) > 72:
+        raise PydanticCustomError("long_password", "The password is too long: use at most 72 characters.")
+    return password
+
+
+NewPassword = Annotated[str, Field(min_length=8, max_length=128), AfterValidator(_strong_enough)]
+
+
 class Body(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -23,7 +37,7 @@ class RegisterIn(Body):
     organization_name: str = Field(min_length=2, max_length=100)
     name: str = Field(min_length=2, max_length=80)
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: NewPassword
 
 
 class LoginIn(Body):
@@ -31,10 +45,23 @@ class LoginIn(Body):
     password: str = Field(min_length=1, max_length=128)
 
 
+class ForgotPasswordIn(Body):
+    email: EmailStr
+
+
+class ResetTokenIn(Body):
+    token: str = Field(min_length=20, max_length=200)
+
+
+class ResetPasswordIn(ResetTokenIn):
+    password: NewPassword
+    confirm_password: str = Field(min_length=1, max_length=128)
+
+
 class UserCreate(Body):
     name: str = Field(min_length=2, max_length=80)
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: NewPassword
     role: Role
     # Left out: what the role gives. The server checks every key against its own catalogue.
     permissions: list[str] | None = Field(None, max_length=50)

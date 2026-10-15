@@ -143,7 +143,7 @@ function formDialog({ title, fields = [], submitLabel = 'Save', note = '', tone 
       } else if (f.type === 'textarea') {
         input = `<textarea name="${f.name}" rows="${f.rows || 4}" ${required} maxlength="${f.maxlength || 5000}">${esc(f.value)}</textarea>`;
       } else {
-        const extra = [f.accept ? `accept="${f.accept}"` : '', f.min !== undefined ? `min="${f.min}"` : '', f.minlength ? `minlength="${f.minlength}"` : ''].join(' ');
+        const extra = [f.accept ? `accept="${f.accept}"` : '', f.min !== undefined ? `min="${f.min}"` : '', f.minlength ? `minlength="${f.minlength}"` : '', f.maxlength ? `maxlength="${f.maxlength}"` : ''].join(' ');
         input = `<input name="${f.name}" type="${f.type || 'text'}" value="${esc(f.value)}" ${required} ${extra}>`;
       }
       return `<label>${esc(f.label)}${f.required ? ' *' : ''}${input}${f.hint ? `<span class="hint">${esc(f.hint)}</span>` : ''}</label>`;
@@ -1071,7 +1071,7 @@ pages.users = async () => {
       note: 'The user starts with the standard access of the role. Use “Access” afterwards to change it for this user.',
       fields: [
         { name: 'name', label: 'Name', required: true, minlength: 2 }, { name: 'email', label: 'Email', type: 'email', required: true },
-        { name: 'password', label: 'Initial password', type: 'password', required: true, minlength: 8, hint: 'At least 8 characters. Give it to the user personally.' },
+        { name: 'password', label: 'Initial password', type: 'password', required: true, minlength: 8, maxlength: 72, hint: 'At least 8 characters, with a letter and a number. Give it to the user personally.' },
         { name: 'role', label: 'Role', type: 'select', options: roleOptions, value: 'technician' },
       ],
       submit: values => api('/users', { method: 'POST', body: values }),
@@ -1170,7 +1170,11 @@ document.addEventListener('click', event => {
   const row = event.target.closest('tr[data-href]');
   if (row && !event.target.closest('a, button')) location.hash = row.dataset.href;
 });
-window.addEventListener('hashchange', () => { if (me) route(); });
+window.addEventListener('hashchange', () => {
+  const linkToken = resetTokenIn(location.hash);
+  if (linkToken) openResetLink(linkToken);
+  else if (me) route();
+});
 
 // ---------- registration payment and company logo ----------
 
@@ -1476,16 +1480,56 @@ async function signIn(email, password) {
   showApp();
 }
 
-document.querySelectorAll('[data-auth-tab]').forEach(tab => {
-  tab.onclick = () => {
-    document.querySelectorAll('[data-auth-tab]').forEach(t => t.classList.toggle('active', t === tab));
-    $('#login-form').hidden = tab.dataset.authTab !== 'login';
-    $('#register-form').hidden = tab.dataset.authTab !== 'register';
-    $('#auth-error').textContent = '';
-    // The two forms differ in height: start the new one from the top of the card
-    $('#auth').scrollTop = 0;
+/** One form of the signed-out card: login, register, forgot (ask for a reset link) or reset (the new password). */
+function showAuthView(view) {
+  $('#auth-tabs').hidden = !['login', 'register'].includes(view);
+  document.querySelectorAll('[data-auth-tab]').forEach(t => t.classList.toggle('active', t.dataset.authTab === view));
+  for (const name of ['login', 'register', 'forgot', 'reset']) $(`#${name}-form`).hidden = name !== view;
+  $('#auth-error').textContent = '';
+  $('#auth-ok').textContent = '';
+  // The forms differ in height: start the new one from the top of the card
+  $('#auth').scrollTop = 0;
+}
+document.querySelectorAll('[data-auth-tab]').forEach(tab => { tab.onclick = () => showAuthView(tab.dataset.authTab); });
+document.querySelectorAll('[data-auth-view]').forEach(button => {
+  button.onclick = () => {
+    const email = $('#login-form [name=email]').value;
+    showAuthView(button.dataset.authView);
+    if (button.dataset.authView === 'forgot' && email) $('#forgot-form [name=email]').value = email;
+    $('#auth-forms form:not([hidden]) input').focus({ preventScroll: true });
   };
 });
+
+// The link in a "forgot password" mail: #/reset-password?token=...
+let resetToken = null;
+function resetTokenIn(hash) {
+  const match = hash.match(/^#\/reset-password\?(.*)$/);
+  return match ? new URLSearchParams(match[1]).get('token') : null;
+}
+
+async function openResetLink(linkToken) {
+  // Out of the address bar, so the token is not left in the history or seen over a shoulder
+  history.replaceState(null, '', location.pathname);
+  if (token) await api('/auth/logout', { method: 'POST' }).catch(() => {});
+  signOut();
+  showSwipe(false);
+  showAuthView('reset');
+  resetToken = linkToken;
+  $('#reset-for').textContent = 'Checking the link…';
+  try {
+    const { email } = await api('/auth/reset-password/check', { method: 'POST', body: { token: linkToken } });
+    $('#reset-for').textContent = `For the account ${email}.`;
+  } catch (error) {
+    resetToken = null;
+    showAuthView('forgot');
+    $('#auth-error').textContent = error.message;
+  }
+}
+
+/** The server's rule for a new password, checked here first so the message comes at once. */
+function checkNewPassword(password) {
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) throw new Error('Use at least one letter and one number in the password.');
+}
 
 function authForm(selector, handler) {
   $(selector).onsubmit = async event => {
@@ -1493,6 +1537,7 @@ function authForm(selector, handler) {
     const button = $('button[type=submit]', event.target);
     button.disabled = true;
     $('#auth-error').textContent = '';
+    $('#auth-ok').textContent = '';
     try {
       await handler(Object.fromEntries(new FormData(event.target)));
       event.target.reset();
@@ -1503,8 +1548,22 @@ function authForm(selector, handler) {
   };
 }
 authForm('#login-form', values => signIn(values.email, values.password));
+authForm('#forgot-form', async values => {
+  const { detail } = await api('/auth/forgot-password', { method: 'POST', body: values });
+  $('#auth-ok').textContent = detail;
+});
+authForm('#reset-form', async values => {
+  if (!resetToken) throw new Error('Open the link from the mail again, or ask for a new one with "Forgot password".');
+  checkNewPassword(values.password);
+  if (values.password !== values.confirm_password) throw new Error('The two passwords do not match.');
+  const { detail } = await api('/auth/reset-password', { method: 'POST', body: { token: resetToken, ...values } });
+  resetToken = null;
+  showAuthView('login');
+  $('#auth-ok').textContent = detail;
+});
 authForm('#register-form', async values => {
   const { logo, ...account } = values;
+  checkNewPassword(account.password);
   const picture = logo && logo.size ? logo : null;
   if (picture && picture.size > 512 * 1024) throw new Error('The logo is larger than 512 KB. Choose a smaller picture.');
   await api('/auth/register', { method: 'POST', body: account });
@@ -1541,6 +1600,8 @@ $('#sign-out').onclick = async () => {
 };
 
 (async () => {
+  const linkToken = resetTokenIn(location.hash);
+  if (linkToken) return openResetLink(linkToken);
   if (!token) return signOut();
   try {
     me = await api('/auth/me');
@@ -1674,6 +1735,7 @@ window.addEventListener('wheel', event => { if (event.ctrlKey) event.preventDefa
 
 // Sign-in: swipe (or press the thumb) to reveal the form
 function showSwipe(on) {
+  if (on) showAuthView('login');
   $('#swipe').hidden = !on;
   $('#auth-forms').hidden = on;
   $('#swipe-thumb').style.transform = '';

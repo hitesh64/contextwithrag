@@ -646,6 +646,12 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
 .auth-actions { display: flex; gap: 10px; margin-top: 4px; }
 .auth-actions .btn { font-size: 13px; padding: 9px 14px; }
 .auth-actions .btn.primary { flex: 1 1 auto; }
+.auth-step { font-size: 16px; font-weight: 700; color: var(--ink-strong); margin: 0; }
+.auth-card .ok { color: var(--green); font-size: 13px; margin: .5rem 0 0; }
+.auth-card .ok:empty { display: none; }
+.link-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--brand); cursor: pointer; }
+.link-btn:hover { text-decoration: underline; }
+.forgot-link { justify-self: end; font-size: 12px; margin-top: -8px; }
 
 .swipe {
   position: relative; height: 52px; border-radius: 999px; padding: 4px; user-select: none; touch-action: none;

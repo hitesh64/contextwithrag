@@ -29,13 +29,14 @@
       </div>
 
       <div id="auth-forms" hidden>
-        <div class="tabs" role="tablist">
+        <div class="tabs" id="auth-tabs" role="tablist">
           <button class="tab active" data-auth-tab="login" type="button">Sign in</button>
           <button class="tab" data-auth-tab="register" type="button">Register a factory</button>
         </div>
         <form id="login-form">
           <label>Email <input name="email" type="email" required autocomplete="username"></label>
           <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+          <button class="link-btn forgot-link" type="button" data-auth-view="forgot">Forgot password?</button>
           <div class="auth-actions">
             <button class="btn" type="button" data-swipe-back><i class="fa-solid fa-arrow-left"></i>Back</button>
             <button class="btn primary" type="submit">Sign in</button>
@@ -51,7 +52,8 @@
           </div>
           <label>Your name <input name="name" required minlength="2" maxlength="80"></label>
           <label>Email <input name="email" type="email" required autocomplete="username"></label>
-          <label>Password <input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
+          <label>Password <input name="password" type="password" required minlength="8" maxlength="72" autocomplete="new-password"></label>
+          <p class="hint">At least 8 characters, with a letter and a number.</p>
           <p class="hint">You become the administrator of this factory and can add your team afterwards.
             <span id="register-fee"></span></p>
           <div class="auth-actions">
@@ -59,7 +61,28 @@
             <button class="btn primary" type="submit">Create workspace</button>
           </div>
         </form>
+        <form id="forgot-form" hidden>
+          <h2 class="auth-step">Forgot your password?</h2>
+          <p class="hint">Enter the email you sign in with. We mail you a link to set a new password.</p>
+          <label>Email <input name="email" type="email" required autocomplete="username"></label>
+          <div class="auth-actions">
+            <button class="btn" type="button" data-auth-view="login"><i class="fa-solid fa-arrow-left"></i>Sign in</button>
+            <button class="btn primary" type="submit">Send reset link</button>
+          </div>
+        </form>
+        <form id="reset-form" hidden>
+          <h2 class="auth-step">Set a new password</h2>
+          <p class="hint" id="reset-for">Checking the link…</p>
+          <label>New password <input name="password" type="password" required minlength="8" maxlength="72" autocomplete="new-password"></label>
+          <label>Confirm new password <input name="confirm_password" type="password" required minlength="8" maxlength="72" autocomplete="new-password"></label>
+          <p class="hint">At least 8 characters, with a letter and a number. Every device signed in to this account is signed out.</p>
+          <div class="auth-actions">
+            <button class="btn" type="button" data-auth-view="login">Cancel</button>
+            <button class="btn primary" type="submit">Save new password</button>
+          </div>
+        </form>
       </div>
+      <p id="auth-ok" class="ok" role="status"></p>
       <p id="auth-error" class="error" role="alert"></p>
     </section>
   </main>

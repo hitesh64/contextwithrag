@@ -161,3 +161,37 @@ def test_the_address_itself_opens_the_application(client):
     moved = client.get("/app", follow_redirects=False)
     assert moved.status_code == 307 and moved.headers["location"] == "/"
     assert client.get("/static/js/app.js").status_code == 200 and client.get("/health").json()["status"] == "ok"
+
+
+def test_new_passwords_follow_one_rule(client, factory):
+    def register(password, email="new@gamma.example.com"):
+        return client.post(f"{API}/auth/register", json={
+            "organization_name": "gamma", "name": "Gamma admin", "email": email, "password": password,
+        })
+
+    for weak in ("short1", "onlyletters", "1234567890"):
+        response = register(weak)
+        assert response.status_code == 422, weak
+    assert "letter and one number" in str(register("onlyletters").json()["detail"])
+    # bcrypt refuses more than 72 bytes: a clear 422, never a server error
+    assert register("a1" * 40).status_code == 422
+    assert register("ä1" * 30).status_code == 422
+    created = client.post(f"{API}/users", headers=factory.admin, json={
+        "name": "Weak One", "email": "weak@alpha.example.com", "password": "password", "role": "viewer",
+    })
+    assert created.status_code == 422
+
+
+def test_login_is_limited_per_address_across_emails(client, factory):
+    from backend.app.api import auth
+
+    auth.address_limiter.reset()
+    auth.address_limiter.limit = 3
+    try:
+        codes = [
+            client.post(f"{API}/auth/login", json={"email": f"user{i}@alpha.example.com", "password": "wrong-password"}).status_code
+            for i in range(4)
+        ]
+    finally:
+        auth.address_limiter.limit = 5000
+    assert codes == [401, 401, 401, 429]
