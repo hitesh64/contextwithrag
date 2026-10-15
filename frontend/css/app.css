@@ -639,7 +639,6 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
 .auth-video .login-tagline {
   background-image: linear-gradient(100deg, #e2e8f0 0%, #e2e8f0 40%, #c4b5fd 47%, #93c5fd 53%, #e2e8f0 60%, #e2e8f0 100%);
 }
-.auth-video .auth-card { box-shadow: 0 24px 70px rgba(2, 6, 23, .55); }
 /* The rail and tagline sit beside the card; hide them when the window is too short or narrow for that */
 @media (max-height: 640px), (max-width: 1180px) { .login-rail, .login-tagline { display: none; } }
 .auth-card {
@@ -663,6 +662,62 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
 .auth-step { font-size: 16px; font-weight: 700; color: var(--ink-strong); margin: 0; }
 .auth-card .ok { color: var(--green); font-size: 13px; margin: .5rem 0 0; }
 .auth-card .ok:empty { display: none; }
+
+/* Sign-in and register over the film: a dark frosted-glass card, light type, blue as the one accent */
+.auth-video .auth-card {
+  color: #e2e8f0;
+  background: linear-gradient(160deg, rgba(30, 41, 59, .62), rgba(15, 23, 42, .5));
+  border: 1px solid rgba(255, 255, 255, .16); border-top-color: rgba(255, 255, 255, .28);
+  box-shadow: 0 30px 80px -10px rgba(2, 6, 23, .7), inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .auth-video .auth-card {
+    background: linear-gradient(160deg, rgba(30, 41, 59, .42), rgba(15, 23, 42, .3));
+    -webkit-backdrop-filter: blur(20px) saturate(140%); backdrop-filter: blur(20px) saturate(140%);
+  }
+}
+.auth-video .auth-card .wordmark {
+  background-image: linear-gradient(105deg, #ffffff 0%, #e2e8f0 42%, #e3c27f 50%, #e2e8f0 58%, #ffffff 100%);
+}
+.auth-video .auth-card h1, .auth-video .auth-step { color: #f8fafc; }
+.auth-video .auth-card > .muted, .auth-video .auth-card .hint, .auth-video .auth-card .muted { color: #a5b4c8; }
+.auth-video .auth-card label { color: #cbd5e1; letter-spacing: .12em; }
+.auth-video .auth-card input {
+  color: #f8fafc; background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .18);
+}
+.auth-video .auth-card input:hover { border-color: rgba(255, 255, 255, .3); }
+.auth-video .auth-card input:focus { background: rgba(255, 255, 255, .1); border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96, 165, 250, .22); }
+/* Browser autofill would otherwise paint a light box inside the dark glass */
+.auth-video .auth-card input:-webkit-autofill {
+  -webkit-text-fill-color: #f8fafc; caret-color: #f8fafc;
+  box-shadow: 0 0 0 1000px rgba(30, 41, 59, .96) inset; transition: background-color 9999s;
+}
+.auth-video .auth-card input[type=file] { padding: 7px 8px; font-size: 12px; color: #a5b4c8; }
+.auth-video .auth-card input[type=file]::file-selector-button {
+  margin-right: 10px; padding: 5px 12px; border: 1px solid rgba(255, 255, 255, .22); border-radius: var(--r-btn);
+  background: rgba(255, 255, 255, .1); color: #f8fafc; font: 500 12px var(--font); cursor: pointer;
+}
+.auth-video .logo-pick img { background: rgba(255, 255, 255, .9); border-color: rgba(255, 255, 255, .25); }
+.auth-video .auth-card .tabs {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin: 0 0 4px;
+  border: 1px solid rgba(255, 255, 255, .12); border-radius: 12px; background: rgba(2, 6, 23, .35);
+}
+.auth-video .auth-card .tab { border: 0; border-radius: 9px; padding: 8px 10px; color: #a5b4c8; }
+.auth-video .auth-card .tab:hover { color: #f8fafc; background: rgba(255, 255, 255, .06); }
+.auth-video .auth-card .tab.active { color: #fff; background: rgba(255, 255, 255, .14); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 4px 12px -6px rgba(2, 6, 23, .8); }
+.auth-video .auth-actions .btn:not(.primary) { color: #e2e8f0; background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .2); }
+.auth-video .auth-actions .btn:not(.primary):hover { color: #fff; background: rgba(255, 255, 255, .12); }
+.auth-video .auth-actions .btn.primary { background: linear-gradient(180deg, #3b82f6, #2563eb); border-color: rgba(147, 197, 253, .45); box-shadow: 0 10px 24px -10px rgba(37, 99, 235, .9); }
+.auth-video .auth-actions .btn.primary:hover { background: linear-gradient(180deg, #2563eb, #1d4ed8); }
+.auth-video .link-btn { color: #93c5fd; }
+.auth-video .auth-card .error { color: #fca5a5; }
+.auth-video .auth-card .ok { color: #86efac; }
+.auth-video .swipe {
+  background: linear-gradient(100deg, rgba(37, 99, 235, .85), rgba(29, 78, 216, .7) 60%, rgba(30, 64, 175, .55));
+  border: 1px solid rgba(147, 197, 253, .35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .15), 0 12px 28px -14px rgba(37, 99, 235, .9);
+}
+.auth-video .swipe-thumb { color: #1d4ed8; }
 .link-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--brand); cursor: pointer; }
 .link-btn:hover { text-decoration: underline; }
 .forgot-link { justify-self: end; font-size: 12px; margin-top: -8px; }
