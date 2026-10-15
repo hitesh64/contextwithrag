@@ -36,6 +36,10 @@ class Settings:
     REINDEX_ON_START = _flag("REINDEX_ON_START")
 
     LOGIN_EXPIRE_MINUTES = int(os.getenv("LOGIN_EXPIRE_MINUTES", "720"))
+    # Seconds a signed-in user's record and company status are kept in memory between requests, saving three database
+    # round trips per page. Every request that changes something empties it, so a sign-out, a new permission or a
+    # deactivation counts from the next request. 0 turns it off; the in-memory test database always has it off.
+    AUTH_CACHE_SECONDS = 0 if MONGO_URI.startswith("mongomock://") else int(os.getenv("AUTH_CACHE_SECONDS", "15"))
     # How long the link in a "forgot password" mail can be used
     PASSWORD_RESET_MINUTES = int(os.getenv("PASSWORD_RESET_MINUTES", "30"))
     # A file kept in MongoDB must fit in one record (16 MB)

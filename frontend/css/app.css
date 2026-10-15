@@ -127,10 +127,22 @@ code { color: var(--brand-ink); }
     var(--bg-page);
 }
 .content-area { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 24px; }
-/* Each page arrives as a short cascade */
-.content-area > * { animation: page-in .45s var(--ease) both; }
-.content-area > :nth-child(2) { animation-delay: .05s; } .content-area > :nth-child(3) { animation-delay: .1s; }
-.content-area > :nth-child(4) { animation-delay: .15s; } .content-area > :nth-child(n+5) { animation-delay: .2s; }
+/* Each page arrives as a short cascade: quick, so it never makes a page feel slower than its data */
+.content-area > * { animation: page-in .26s var(--ease) both; }
+.content-area > :nth-child(2) { animation-delay: .03s; } .content-area > :nth-child(3) { animation-delay: .06s; }
+.content-area > :nth-child(n+4) { animation-delay: .09s; }
+
+/* Frame of a page whose data is on its way (draw in app.js): its title and soft placeholder rows */
+.frame { display: grid; gap: 14px; }
+.frame-bar, .frame-row, .frame-card { border-radius: var(--r-card); }
+.frame-bar { height: 52px; }
+.frame-card { padding: 16px 18px; display: grid; gap: 12px; border: 1px solid var(--line); background: linear-gradient(180deg, var(--surface-2), var(--surface)); }
+.frame-row { height: 14px; border-radius: 6px; }
+.frame-row:nth-child(3n + 2) { width: 82%; } .frame-row:nth-child(3n) { width: 64%; }
+.frame-bar, .frame-row {
+  background: linear-gradient(90deg, rgba(148, 163, 184, .07) 25%, rgba(148, 163, 184, .16) 50%, rgba(148, 163, 184, .07) 75%) 0 0 / 300% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
 
 /* ───────── 4. Header: flat top bar ───────── */
 /* After the UI-shell pattern (one flat row, one hairline) and control-room practice (ISA-101): neutral surface,
@@ -939,6 +951,7 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
 @keyframes rings { from { opacity: .7; } to { opacity: 1; } }
 @keyframes nudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
 @keyframes page-in { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: 0 0; } }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
 @keyframes tick-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
 /* ───────── Company logo ───────── */

@@ -195,3 +195,30 @@ def test_login_is_limited_per_address_across_emails(client, factory):
     finally:
         auth.address_limiter.limit = 5000
     assert codes == [401, 401, 401, 429]
+
+
+def test_remembered_login_saves_lookups_and_forgets_on_any_change(client, factory, monkeypatch):
+    """With the short login memory on, a repeated request skips the three lookups, and a sign-out or a
+    deactivation (both changing requests) still count from the very next request."""
+    from backend.app.core import security
+    monkeypatch.setattr(security.settings, "AUTH_CACHE_SECONDS", 30)
+    security.forget_signed_in_users()
+    lookups = []
+    find_one = database.login_sessions.find_one
+    monkeypatch.setattr(security.login_sessions, "find_one", lambda *a, **k: lookups.append(1) or find_one(*a, **k))
+
+    technician = factory.user("technician")
+    lookups.clear()  # creating the user was a change of its own
+    assert client.get(f"{API}/assets", headers=technician).status_code == 200
+    assert client.get(f"{API}/assets", headers=technician).status_code == 200
+    assert len(lookups) == 1
+
+    user_id = client.get(f"{API}/auth/me", headers=technician).json()["id"]
+    assert client.patch(f"{API}/users/{user_id}", headers=factory.admin, json={"is_active": False}).status_code == 200
+    assert client.get(f"{API}/assets", headers=technician).status_code == 401
+
+    headers = factory.login("admin@alpha.example.com")
+    assert client.get(f"{API}/assets", headers=headers).status_code == 200
+    assert client.post(f"{API}/auth/logout", headers=headers).status_code == 204
+    assert client.get(f"{API}/assets", headers=headers).status_code == 401
+    security.forget_signed_in_users()

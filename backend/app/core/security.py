@@ -7,8 +7,11 @@ links of "forgot password" work the same way.
 The organization a request may touch always comes from the logged-in user's own record,
 never from anything the browser sends.
 """
+import copy
 import hashlib
 import secrets
+import threading
+import time
 from datetime import timedelta
 
 import bcrypt
@@ -89,6 +92,37 @@ def password_reset_user(token: str) -> dict | None:
     return user
 
 
+# Short memory of signed-in users and company statuses (settings.AUTH_CACHE_SECONDS). Any request that changes
+# something calls forget_signed_in_users() when it ends (middleware in main.py). A lookup that started before such a
+# change is not kept: the generation number moves on with every forget.
+_cache: dict[str, tuple[float, object]] = {}
+_cache_lock = threading.Lock()
+_generation = 0
+
+
+def forget_signed_in_users() -> None:
+    global _generation
+    with _cache_lock:
+        _generation += 1
+        _cache.clear()
+
+
+def _remembered(key: str):
+    with _cache_lock:
+        entry = _cache.get(key)
+    if entry and entry[0] > time.monotonic():
+        return copy.deepcopy(entry[1])
+    return None
+
+
+def _remember(key: str, value, generation: int) -> None:
+    if settings.AUTH_CACHE_SECONDS <= 0:
+        return
+    with _cache_lock:
+        if generation == _generation:
+            _cache[key] = (time.monotonic() + settings.AUTH_CACHE_SECONDS, copy.deepcopy(value))
+
+
 def get_signed_in_user(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
     """The logged-in user, whether or not the company has paid. Only for signing out, /auth/me and the payment."""
     unauthorized = HTTPException(
@@ -96,6 +130,13 @@ def get_signed_in_user(creds: HTTPAuthorizationCredentials | None = Depends(bear
     )
     if creds is None:
         raise unauthorized
+    key = "login:" + _token_hash(creds.credentials)
+    remembered = _remembered(key)
+    if remembered is not None:
+        expires_at, user = remembered
+        if expires_at > now():
+            return user
+    generation = _generation
     session = login_sessions.find_one({"token_hash": _token_hash(creds.credentials)})
     if session is None or session["expires_at"] <= now():
         raise unauthorized
@@ -105,13 +146,21 @@ def get_signed_in_user(creds: HTTPAuthorizationCredentials | None = Depends(bear
     if not user.get("is_active", True):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Account is deactivated")
     user["id"] = str(user["_id"])
+    _remember(key, (session["expires_at"], user), generation)
     return user
 
 
 def organization_status(organization_id: str) -> str:
     """'pending_payment', 'active' or 'rejected'. Companies created before the fee existed have no status: active."""
+    key = "org:" + organization_id
+    remembered = _remembered(key)
+    if remembered is not None:
+        return remembered
+    generation = _generation
     org = organizations.find_one({"_id": ObjectId(organization_id)}, {"status": 1})
-    return (org or {}).get("status", "active")
+    result = (org or {}).get("status", "active")
+    _remember(key, result, generation)
+    return result
 
 
 def get_current_user(user: dict = Depends(get_signed_in_user)) -> dict:

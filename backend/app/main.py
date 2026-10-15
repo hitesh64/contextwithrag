@@ -15,6 +15,7 @@ from .api import (
 )
 from .core.config import settings
 from .core.database import documents as document_records, init_db
+from .core.security import forget_signed_in_users
 from .services import audit_service, ingestion, retrieval
 
 log = logging.getLogger(__name__)
@@ -74,6 +75,25 @@ class RequestIdMiddleware:
         await self.app(scope, receive, send_with_id)
 
 
+class ForgetUsersAfterChanges:
+    """After any request that may change something (not GET/HEAD/OPTIONS), drop the remembered signed-in users and
+    company statuses, so sign-outs, permission changes, deactivations and payments count from the next request."""
+
+    SAFE = {"GET", "HEAD", "OPTIONS"}
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] in self.SAFE:
+            return await self.app(scope, receive, send)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            forget_signed_in_users()
+
+
+app.add_middleware(ForgetUsersAfterChanges)
 app.add_middleware(RequestIdMiddleware)
 if settings.CORS_ORIGINS:
     app.add_middleware(CORSMiddleware, allow_origins=settings.CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])

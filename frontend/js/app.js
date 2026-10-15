@@ -48,12 +48,59 @@ function toast(message, bad = false) {
   setTimeout(() => el.remove(), bad ? 7000 : 3500);
 }
 
-async function api(path, { method = 'GET', body, form, params, raw = false } = {}) {
+function apiUrl(path, params) {
   let url = API + path;
   if (params) {
     const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v !== null && v !== undefined));
     if (query.toString()) url += '?' + query;
   }
+  return url;
+}
+
+// GET answers. The same address is asked only once at a time; an answer fetched ahead (pointer over a menu link)
+// is handed to the page that asks next, once and within a few seconds; a few lists that rarely change are kept for
+// a minute. Any change sent to the server, and every sign-in or sign-out, forgets all of it.
+const inflight = new Map();
+const kept = new Map();
+let recording = null; // the addresses the page being drawn asks for (see draw)
+function forgetAnswers() {
+  kept.clear();
+  inflight.clear();
+}
+
+async function api(path, { method = 'GET', body, form, params, raw = false, keep = 0 } = {}) {
+  const url = apiUrl(path, params);
+  if (method !== 'GET' || raw) {
+    if (method !== 'GET') forgetAnswers();
+    try {
+      return await request(url, { method, body, form, raw });
+    } finally {
+      if (method !== 'GET') forgetAnswers();
+    }
+  }
+  recording?.add(url);
+  const ahead = kept.get(url);
+  if (ahead && ahead.until > Date.now()) {
+    if (ahead.once) kept.delete(url);
+    return ahead.answer;
+  }
+  if (inflight.has(url)) return inflight.get(url);
+  const answer = request(url, { method }).finally(() => { if (inflight.get(url) === answer) inflight.delete(url); });
+  inflight.set(url, answer);
+  if (keep) kept.set(url, { until: Date.now() + keep, answer });
+  answer.catch(() => { if (kept.get(url)?.answer === answer) kept.delete(url); });
+  return answer;
+}
+
+/** Ask for a page's data before it is opened; the page picks the answer up when it asks within a few seconds. */
+function prefetch(url) {
+  if (!token || inflight.has(url) || kept.get(url)?.until > Date.now()) return;
+  const answer = request(url, { method: 'GET' });
+  answer.catch(() => kept.delete(url));
+  kept.set(url, { until: Date.now() + 8000, answer, once: true });
+}
+
+async function request(url, { method = 'GET', body, form, raw = false } = {}) {
   const headers = {};
   if (token) headers.Authorization = 'Bearer ' + token;
   let payload = form;
@@ -188,7 +235,7 @@ const confirmDialog = (title, note, submitLabel = 'Confirm', tone = 'info') =>
   formDialog({ title, note, submitLabel, tone, submit: async () => true });
 
 async function assetOptions() {
-  const found = await api('/assets/options');
+  const found = await api('/assets/options', { keep: 60000 });
   return found.map(a => [a.id, `${a.asset_code} — ${a.name}`]);
 }
 
@@ -794,10 +841,12 @@ actions['edit-breakdown'] = async el => {
 };
 
 pages.breakdowns = async (_, query) => {
-  const assets = await assetOptions();
   const params = Object.fromEntries(['asset_id', 'status', 'q', 'error_code', 'date_from', 'date_to'].map(k => [k, query.get(k) || '']));
   if (query.get('asset')) params.q = query.get('asset');
-  const data = await api('/breakdowns', { params: { ...params, page: query.get('page') || 1, date_to: params.date_to && params.date_to + 'T23:59:59' } });
+  const [assets, data] = await Promise.all([
+    assetOptions(),
+    api('/breakdowns', { params: { ...params, page: query.get('page') || 1, date_to: params.date_to && params.date_to + 'T23:59:59' } }),
+  ]);
   page().innerHTML = `
     <div class="page-head"><h1>Breakdown history</h1><div class="actions">
       <button class="btn" data-action="export-breakdowns">Export Excel</button>
@@ -1163,6 +1212,23 @@ function currentRoute() {
 
 const OPENABLE = ['add-asset', 'add-breakdown', 'import'];
 
+// What each plain menu address asked for the last time it was drawn, so a pointer over the menu link can fetch it
+// ahead. Before a first visit: the requests of each page's opening view.
+const pageAddresses = {
+  dashboard: [apiUrl('/dashboard', { days: '90' })], chat: [apiUrl('/assets/options')], assets: [apiUrl('/assets', { page: 1 })],
+  documents: [apiUrl('/documents', { page: 1 }), apiUrl('/assets/options')],
+  breakdowns: [apiUrl('/assets/options'), apiUrl('/breakdowns', { page: 1 })], 'work-orders': [apiUrl('/work-orders', { page: 1 })],
+  conflicts: [apiUrl('/conflicts', { status: 'open', page: 1 })], audit: [apiUrl('/audit', { page: 1 })],
+  users: [apiUrl('/users'), apiUrl('/permissions'), apiUrl('/billing')],
+  companies: [apiUrl('/platform/companies', { page: 1 })], payments: [apiUrl('/platform/payments', { page: 1 })],
+};
+let drawnPage = '';
+
+/** Shown when a newly opened page's data takes longer than a blink: its title and the shape of what is coming. */
+const pageFrame = entry => `<div class="page-head"><h1>${fa(entry[3])}${esc(entry[1])}</h1></div>
+  <div class="frame" aria-busy="true" aria-label="Loading ${esc(entry[1])}">
+    <div class="frame-bar"></div><div class="frame-card">${'<div class="frame-row"></div>'.repeat(6)}</div></div>`;
+
 async function draw() {
   clearTimeout(pollTimer);
   charts.forEach(c => c.destroy());
@@ -1173,8 +1239,17 @@ async function draw() {
     page().innerHTML = '<div class="empty">You do not have access to this page. Ask an administrator if you need it.</div>';
     return;
   }
+  // Another page (not a filter or a refresh of this one): if nothing is drawn within 120 ms, show its frame
+  const opened = `${entry[0]}/${id || ''}`;
+  const before = page().firstElementChild;
+  const frame = opened !== drawnPage
+    ? setTimeout(() => { if (page().firstElementChild === before) page().innerHTML = pageFrame(entry); }, 120) : null;
+  drawnPage = opened;
+  const asked = new Set();
+  recording = asked;
   try {
     await pages[entry[0]](id, new URLSearchParams(search));
+    if (location.hash === `#/${entry[0]}` && asked.size) pageAddresses[entry[0]] = [...asked];
     const heading = $('.page-head h1');
     if (heading && !heading.querySelector('i')) heading.insertAdjacentHTML('afterbegin', fa(entry[3]));
     // A link may open one of the page's own forms, e.g. the dashboard's "Add asset": #/assets?open=add-asset
@@ -1186,7 +1261,18 @@ async function draw() {
   } catch (error) {
     if (token) page().innerHTML = `<div class="card"><h2>${fa('circle-exclamation')}This page could not be loaded</h2><p class="error">${esc(error.message)}</p><button class="btn" data-action="retry">Try again</button></div>`;
     actions.retry = route;
+  } finally {
+    clearTimeout(frame);
+    if (recording === asked) recording = null;
   }
+}
+
+// Pointer over (or focus on, or a finger down on) a menu link: start fetching that page's data
+for (const type of ['pointerenter', 'focusin', 'touchstart']) {
+  $('#nav').addEventListener(type, event => {
+    const link = event.target.closest?.('#nav a[data-page]');
+    if (link) (pageAddresses[link.dataset.page] || []).forEach(prefetch);
+  }, { capture: true, passive: true });
 }
 
 // One page is drawn at a time, and only the address the user is on now: without this, a slow answer for a page
@@ -1526,7 +1612,7 @@ function showApp() {
     section = group;
     return `${title}<a href="#/${key}" data-page="${key}" data-tip="${text}">${fa(icon)}<span class="nav-text">${text}</span></a>`;
   }).join('');
-  if (can('dashboard.view')) api('/dashboard', { params: { days: 30 } }).then(navBadges).catch(() => {});
+  if (can('dashboard.view')) api('/dashboard', { params: { days: '90' } }).then(navBadges).catch(() => {});
   // An address left behind by whoever used this browser before may be a section this user cannot see
   const first = NAV.find(n => can(n[2]));
   // The header's mark leads to this user's first section: the dashboard, or the owner's Companies
@@ -1537,6 +1623,8 @@ function showApp() {
 
 function signOut() {
   resetLaunch();
+  forgetAnswers();
+  drawnPage = '';
   token = null;
   me = null;
   chatLog.length = 0;
@@ -1612,6 +1700,7 @@ async function signIn(email, password) {
   token = result.access_token;
   me = result.user;
   sessionStorage.setItem('token', token);
+  forgetAnswers();
   await enterApp();
 }
 
