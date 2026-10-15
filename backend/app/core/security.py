@@ -115,7 +115,11 @@ def organization_status(organization_id: str) -> str:
 
 
 def get_current_user(user: dict = Depends(get_signed_in_user)) -> dict:
-    """The logged-in user of a company that is active, i.e. whose registration fee was accepted."""
+    """The logged-in user of a company that is active, i.e. whose registration fee was accepted. The platform owner
+    manages the companies from outside and never works inside one, not even the company that holds their account."""
+    if is_platform_owner(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "The platform owner account has no factory workspace. Use Companies and Payments.")
     if organization_status(user["organization_id"]) != "active":
         raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, "Your company's registration payment is not confirmed yet.")
     return user

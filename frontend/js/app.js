@@ -37,7 +37,8 @@ const when = value => (value ? new Date(value).toLocaleString([], { dateStyle: '
 const day = value => (value ? new Date(value).toLocaleDateString([], { dateStyle: 'medium' }) : '—');
 const shown = value => (value === null || value === undefined || value === '' ? '<span class="muted">not recorded</span>' : esc(value));
 // The server sends what this user may do; it enforces the same list itself, so this only decides what is drawn
-const can = permission => Boolean(me) && (permission === 'platform.owner' ? me.platform_owner : me.permissions.includes(permission));
+// The platform owner sees only the platform console, never the inside of a company (the server refuses it too)
+const can = permission => Boolean(me) && (me.platform_owner ? permission === 'platform.owner' : me.permissions.includes(permission));
 
 function toast(message, bad = false) {
   const el = document.createElement('div');
@@ -251,7 +252,7 @@ const NAV = [
   ['breakdowns', 'Breakdowns', 'breakdowns.view', 'triangle-exclamation', 'Maintenance'], ['work-orders', 'Work orders', 'work_orders.view', 'clipboard-list', 'Maintenance'],
   ['conflicts', 'Conflicts', 'conflicts.view', 'code-compare', 'Maintenance'],
   ['audit', 'Audit history', 'audit.view', 'clock-rotate-left', 'Administration'], ['users', 'Users', 'users.manage', 'users', 'Administration'],
-  ['payments', 'Payments', 'platform.owner', 'indian-rupee-sign', 'Platform'],
+  ['companies', 'Companies', 'platform.owner', 'building', 'Platform'], ['payments', 'Payments', 'platform.owner', 'indian-rupee-sign', 'Platform'],
 ];
 const fa = name => `<i class="fa-solid fa-${name}"></i>`;
 
@@ -1290,7 +1291,7 @@ async function headerLogo(url) {
 }
 
 function showLogos() {
-  const url = me.organization_logo_url;
+  const url = me.platform_owner ? null : me.organization_logo_url;
   const box = $('#hdr-logo');
   box.hidden = true; // shown once the white version is ready, never as a white box first
   setImage($('#hdr-logo img'), null);
@@ -1414,6 +1415,40 @@ $('#pay-sign-out').onclick = async () => {
   signOut();
 };
 
+pages.companies = async (_, query) => {
+  const params = { q: query.get('q') || '', status: query.get('status') || '', page: query.get('page') || 1 };
+  const data = await api('/platform/companies', { params });
+  const s = data.summary;
+  const tile = (tone, icon, label, value, sub) => kpiTile({ tone, icon, label, value, unit: '', sub, info: label });
+  page().innerHTML = `
+    <div class="page-head"><h1>Companies</h1></div>
+    <div class="kpi-row">
+      ${tile('blue', 'building', 'Companies', s.companies, 'registered on this platform')}
+      ${tile('green', 'circle-check', 'Active', s.active, 'paid and working')}
+      ${tile('amber', 'hourglass-half', 'Waiting for payment', s.pending_payment, 'registered, not paid yet')}
+      ${tile('purple', 'users', 'Users', s.users, 'across all companies')}
+    </div>
+    <form class="filters" id="filters">
+      <label>Search<input name="q" value="${esc(params.q)}" placeholder="Company name" maxlength="100"></label>
+      <label>Status<select name="status">${[['', 'All'], ['active', 'Active'], ['pending_payment', 'Waiting for payment'], ['rejected', 'Rejected']]
+        .map(([v, t]) => `<option value="${v}" ${v === params.status ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+      <button class="btn" type="submit">Apply</button></form>
+    ${table([
+      { title: 'Company', cell: c => `<b>${esc(c.name)}</b><div class="muted">Registered ${when(c.created_at)}</div>` },
+      { title: 'Administrator', cell: c => `${esc(c.admin_name) || '—'}<div class="muted">${esc(c.admin_email)}</div>` },
+      { title: 'Status', cell: c => badge(c.status) },
+      { title: 'Users', num: true, cell: c => `${c.active_users}${c.users !== c.active_users ? `<div class="muted">of ${c.users}</div>` : ''}` },
+      { title: 'Assets', num: true, cell: c => c.assets },
+      { title: 'Documents', num: true, cell: c => c.documents },
+      { title: 'Registration fee', cell: c => (c.paid_at
+        ? `${rupees(c.paid_amount)}${c.test_payment ? ' <span class="badge">test</span>' : ''}<div class="muted">${when(c.paid_at)}</div>`
+        : '<span class="muted">Not paid</span>') },
+    ], data.items, { empty: 'No company matches. New companies appear here once they register.' })}${pager(data, 'company-page')}`;
+  countUp(page());
+  $('#filters').onsubmit = event => { event.preventDefault(); location.hash = '#/companies?' + new URLSearchParams(new FormData(event.target)); };
+  actions['company-page'] = el => { query.set('page', el.dataset.page); location.hash = '#/companies?' + query; };
+};
+
 pages.payments = async (_, query) => {
   const params = { status: query.get('status') || '', page: query.get('page') || 1 };
   const data = await api('/platform/payments', { params });
@@ -1443,10 +1478,12 @@ function showApp() {
   $('#auth').hidden = true;
   $('#pay').hidden = true;
   $('#app').hidden = false;
-  $('#org-name').textContent = me.organization_name;
+  $('#org-name').textContent = me.platform_owner ? 'Platform owner' : me.organization_name;
+  $('.chip-label').textContent = me.platform_owner ? 'Console' : 'Factory';
+  $('#hdr-search').hidden = me.platform_owner;
   showLogos();
   $('#who-name').textContent = me.name;
-  $('#who-role').textContent = ROLE_NAMES[me.role] + (me.custom_permissions ? ' · custom' : '');
+  $('#who-role').textContent = me.platform_owner ? 'Platform owner' : ROLE_NAMES[me.role] + (me.custom_permissions ? ' · custom' : '');
   $('#who-avatar').textContent = me.name.trim().charAt(0);
   let section = '';
   $('#nav').innerHTML = NAV.filter(n => can(n[2])).map(([key, text, , icon, group]) => {
@@ -1457,6 +1494,8 @@ function showApp() {
   if (can('dashboard.view')) api('/dashboard', { params: { days: 30 } }).then(navBadges).catch(() => {});
   // An address left behind by whoever used this browser before may be a section this user cannot see
   const first = NAV.find(n => can(n[2]));
+  // The header's brand and chip lead to this user's first section: the dashboard, or the owner's Companies
+  document.querySelectorAll('.hdr-brand, .hdr-chip, #hdr-logo').forEach(a => { a.href = `#/${first ? first[0] : 'dashboard'}`; });
   if (first && !can(currentRoute().entry[2])) location.hash = `#/${first[0]}`;
   route();
 }
