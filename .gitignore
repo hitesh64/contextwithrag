@@ -28,3 +28,6 @@ Thumbs.db
 storage/
 .pytest_cache/
 backend/eval/results/
+
+# Full-size source of the sign-in film (122 MB); the page uses the compressed img/login-bg.mp4
+frontend/img/logintheme.mp4

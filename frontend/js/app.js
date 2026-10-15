@@ -1847,3 +1847,17 @@ function showSwipe(on) {
   thumb.addEventListener('click', () => { if (dragged < 4) showSwipe(false); });
   document.querySelectorAll('[data-swipe-back]').forEach(button => { button.onclick = () => showSwipe(true); });
 }
+// The sign-in film plays only while the sign-in page is on screen, so a signed-in user never downloads
+// or decodes it; with reduced motion the still poster stays instead
+{
+  const auth = $('#auth');
+  const video = $('#login-video');
+  const still = matchMedia('(prefers-reduced-motion: reduce)');
+  const sync = () => {
+    if (auth.hidden || still.matches) video.pause();
+    else video.play().catch(() => {});
+  };
+  new MutationObserver(sync).observe(auth, { attributes: true, attributeFilter: ['hidden'] });
+  still.addEventListener('change', sync);
+  sync();
+}

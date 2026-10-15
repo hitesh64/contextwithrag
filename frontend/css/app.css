@@ -628,6 +628,18 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
   padding-right: 12px; border-right: 1.5px solid rgba(71, 85, 105, .22);
 }
 .login-tagline { position: fixed; z-index: -1; top: 28px; right: 34px; }
+/* Sign-in page: a looping factory film behind the card, darkened so the card stays the brightest thing */
+.auth-video { background: #0f172a url(/static/img/login-bg.jpg) center / cover no-repeat; }
+.login-video { position: fixed; z-index: -2; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.login-shade {
+  position: fixed; z-index: -1; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse 60% 70% at 50% 50%, rgba(15, 23, 42, .55), rgba(15, 23, 42, .25) 70%), linear-gradient(180deg, rgba(15, 23, 42, .35), rgba(15, 23, 42, .6));
+}
+.auth-video .login-rail { color: rgba(226, 232, 240, .75); border-right-color: rgba(226, 232, 240, .3); }
+.auth-video .login-tagline {
+  background-image: linear-gradient(100deg, #e2e8f0 0%, #e2e8f0 40%, #c4b5fd 47%, #93c5fd 53%, #e2e8f0 60%, #e2e8f0 100%);
+}
+.auth-video .auth-card { box-shadow: 0 24px 70px rgba(2, 6, 23, .55); }
 /* The rail and tagline sit beside the card; hide them when the window is too short or narrow for that */
 @media (max-height: 640px), (max-width: 1180px) { .login-rail, .login-tagline { display: none; } }
 .auth-card {
@@ -1113,4 +1125,5 @@ dialog.confirm .modal-footer .btn { min-width: 120px; padding: 9px 16px; font-si
   .banner-bars button.on::after { width: 100%; }
   .drl-h::before, .drl-h::after, .drl-v::before { opacity: .8; }
   .btn:hover, .stat:hover { transform: none; }
+  .login-video { display: none; }
 }
