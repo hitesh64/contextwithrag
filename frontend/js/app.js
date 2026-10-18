@@ -803,8 +803,8 @@ pages.documents = async (_, query) => {
       if (await attempt(() => api(`/documents/${el.dataset.id}`, { method: 'DELETE' }), 'Document deleted') !== undefined) route();
     }
   };
-  // While something is still processing, refresh until it settles
-  if (data.items.some(d => ['queued', 'processing'].includes(d.status))) pollTimer = setTimeout(route, 2500);
+  // While something is still processing, refresh until it settles (quietly: the page must not replay its entrance)
+  if (data.items.some(d => ['queued', 'processing'].includes(d.status))) pollTimer = setTimeout(() => route({ quiet: true }), 2500);
 };
 
 function breakdownTable(rows, showAsset = true) {
@@ -1229,8 +1229,10 @@ const pageFrame = entry => `<div class="page-head"><h1>${fa(entry[3])}${esc(entr
   <div class="frame" aria-busy="true" aria-label="Loading ${esc(entry[1])}">
     <div class="frame-bar"></div><div class="frame-card">${'<div class="frame-row"></div>'.repeat(6)}</div></div>`;
 
-async function draw() {
+async function draw({ quiet = false } = {}) {
   clearTimeout(pollTimer);
+  // A quiet redraw (a status poll) swaps the content in place, without the entrance animations
+  page().classList.toggle('quiet', quiet);
   charts.forEach(c => c.destroy());
   charts = [];
   const { entry, id, search } = currentRoute();
@@ -1279,10 +1281,10 @@ for (const type of ['pointerenter', 'focusin', 'touchstart']) {
 // they have already left is drawn over the page they went to
 const drawLatest = latestOnly(draw);
 
-function route() {
+function route(options) {
   const { entry } = currentRoute();
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('active', a.dataset.page === entry[0]));
-  return drawLatest();
+  return drawLatest(options?.quiet ? { quiet: true } : {});
 }
 
 document.addEventListener('click', event => {

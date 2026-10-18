@@ -131,6 +131,8 @@ code { color: var(--brand-ink); }
 .content-area > * { animation: page-in .26s var(--ease) both; }
 .content-area > :nth-child(2) { animation-delay: .03s; } .content-area > :nth-child(3) { animation-delay: .06s; }
 .content-area > :nth-child(n+4) { animation-delay: .09s; }
+/* A status poll redraws the same page: no cascade, no title tick, so only the changed values move */
+.content-area.quiet > *, .content-area.quiet .page-head h1::after { animation: none; }
 
 /* Frame of a page whose data is on its way (draw in app.js): its title and soft placeholder rows */
 .frame { display: grid; gap: 14px; }
