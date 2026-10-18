@@ -8,6 +8,7 @@ the logged-in user. Nothing in this module accepts an organization from the brow
 """
 import re
 import threading
+from collections.abc import Callable
 
 import chromadb
 
@@ -65,13 +66,21 @@ def _as_chunk(id_: str, text: str, meta: dict) -> dict:
     }
 
 
-def index_document(organization_id: str, document_id: str, chunks: list[dict]) -> None:
+def index_document(
+    organization_id: str, document_id: str, chunks: list[dict], progress: Callable[[int, int], None] | None = None
+) -> None:
     """Replace the indexed chunks of one document. chunks: {"text", "page", "section"}.
 
     Everything is embedded first, so a failed embedding stores nothing; ids are fixed by position,
-    so running this again for the same document can never leave duplicates.
+    so running this again for the same document can never leave duplicates. progress(done, total)
+    is called after each embedding batch.
     """
-    vectors = llm.embed([c["text"] for c in chunks], "RETRIEVAL_DOCUMENT")
+    texts = [c["text"] for c in chunks]
+    vectors = []
+    for start in range(0, len(texts), llm.EMBED_BATCH):
+        vectors.extend(llm.embed(texts[start:start + llm.EMBED_BATCH], "RETRIEVAL_DOCUMENT"))
+        if progress:
+            progress(len(vectors), len(texts))
     delete_document(organization_id, document_id)
     col = _chunks()
     for start in range(0, len(chunks), BATCH):

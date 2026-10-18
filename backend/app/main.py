@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
     # A document caught mid-processing by a restart would otherwise stay "processing" for ever
     document_records.update_many(
         {"status": {"$in": ["queued", "processing"]}},
-        {"$set": {"status": "failed", "error": "The server restarted during processing. Use Reprocess."}},
+        {"$set": {"status": "failed", "error": "The server restarted during processing. Use Reprocess.", "progress": None}},
     )
     if settings.REINDEX_ON_START:
         # In the background: the server answers its health check while the library is indexed again

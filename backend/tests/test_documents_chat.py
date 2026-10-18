@@ -1,12 +1,13 @@
 import io
 
+from bson import ObjectId
 from docx import Document as DocxDocument
 
 from backend.app.core import database
 from backend.app.core.config import settings
 from backend.app.services import ingestion, llm, retrieval
 
-from .conftest import API, make_pdf
+from .conftest import API, fake_embed, make_pdf
 
 LATHE_PAGES = [
     "CNC Lathe CL-200 maintenance manual. Spindle lubrication: use ISO VG 32 spindle oil. Check the oil level daily.",
@@ -95,6 +96,36 @@ def test_failed_embedding_is_reported_and_retry_creates_no_duplicates(client, fa
     ready = client.get(f"{API}/documents/{doc['id']}", headers=factory.admin).json()
     assert ready["status"] == "ready" and ready["error"] is None
     assert retrieval.count_chunks(doc["id"]) == ready["chunk_count"] == 2
+
+
+def test_processing_records_progress_per_embedding_batch(client, factory, monkeypatch):
+    seen = []
+
+    def watching(texts, task):
+        seen.append(database.documents.find_one({})["progress"])
+        return fake_embed(texts, task)
+
+    monkeypatch.setattr(llm, "embed", watching)
+    monkeypatch.setattr(llm, "EMBED_BATCH", 1)
+    doc = factory.document("lathe.pdf", make_pdf(LATHE_PAGES))
+    assert seen == [
+        {"stage": "indexing", "done": 0, "total": 2},
+        {"stage": "indexing", "done": 1, "total": 2},
+    ]
+    assert doc["status"] == "ready" and doc["progress"] is None
+
+
+def test_status_endpoint_answers_only_for_own_documents(client, factory, other_factory):
+    mine = factory.document("lathe.pdf", make_pdf(LATHE_PAGES))
+    theirs = other_factory.document("press.txt", PRESS_TEXT)
+    ids = ",".join([mine["id"], theirs["id"], "not-an-id", mine["id"], ""])
+    response = client.get(f"{API}/documents/status", params={"ids": ids}, headers=factory.admin)
+    assert response.status_code == 200
+    assert response.json() == {"items": [
+        {"id": mine["id"], "status": "ready", "error": None, "progress": None, "chunk_count": 2, "page_count": 2},
+    ]}
+    too_many = ",".join(str(ObjectId()) for _ in range(201))
+    assert client.get(f"{API}/documents/status", params={"ids": too_many}, headers=factory.admin).status_code == 422
 
 
 def test_delete_removes_record_file_and_index(client, factory):

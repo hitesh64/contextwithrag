@@ -257,6 +257,20 @@ def split(docs: list[Document]) -> list[dict]:
     ]
 
 
+def report_progress(document_id, done: int, total: int) -> None:
+    """Record how many sections are embedded, for the status shown while a document processes.
+
+    Only a display: a failed write is logged and never stops the processing itself.
+    """
+    try:
+        documents.update_one(
+            {"_id": document_id, "status": "processing"},
+            {"$set": {"progress": {"stage": "indexing", "done": done, "total": total}}},
+        )
+    except Exception:
+        log.exception("Could not record the progress of document %s", document_id)
+
+
 def process_document(document_id) -> None:
     """Extract, chunk and index one stored document, and record the outcome on its record.
 
@@ -264,7 +278,7 @@ def process_document(document_id) -> None:
     becomes "ready" only after every chunk is indexed; any error leaves it "failed" with the reason.
     """
     doc = documents.find_one_and_update(
-        {"_id": document_id}, {"$set": {"status": "processing", "error": None}}
+        {"_id": document_id}, {"$set": {"status": "processing", "error": None, "progress": {"stage": "reading"}}}
     )
     if doc is None:
         return
@@ -289,9 +303,13 @@ def process_document(document_id) -> None:
                 f"Too much text to index ({len(chunks)} sections, the limit is {settings.MAX_FILE_CHUNKS}). "
                 "Split the file into smaller parts."
             )
-        retrieval.index_document(organization_id, str(document_id), chunks)
+        report_progress(document_id, 0, len(chunks))
+        retrieval.index_document(
+            organization_id, str(document_id), chunks, lambda done, total: report_progress(document_id, done, total)
+        )
         documents.update_one({"_id": document_id}, {"$set": {
             "status": "ready",
+            "progress": None,
             "chunk_count": len(chunks),
             "page_count": len(parts) if ext in ("pdf", "pptx") else None,
             "parser_version": PARSER_VERSION,
@@ -309,5 +327,6 @@ def process_document(document_id) -> None:
         except Exception:
             log.exception("Could not remove chunks of failed document %s", document_id)
         documents.update_one(
-            {"_id": document_id}, {"$set": {"status": "failed", "error": reason, "chunk_count": 0, "processed_at": now()}}
+            {"_id": document_id},
+            {"$set": {"status": "failed", "error": reason, "progress": None, "chunk_count": 0, "processed_at": now()}},
         )

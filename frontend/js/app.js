@@ -21,6 +21,7 @@ let token = sessionStorage.getItem('token');
 let me = null;
 let charts = [];
 let pollTimer = null;
+let drawCount = 0; // which drawing of a page is current: a page's timers and answers check it before acting
 const chatLog = [];
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -769,11 +770,9 @@ pages.documents = async (_, query) => {
       { title: 'File', cell: d => `<a href="#" data-action="open-doc" data-id="${esc(d.id)}">${esc(d.filename)}</a><div class="hint">${(d.size_bytes / 1024).toFixed(0)} KB · uploaded ${when(d.created_at)} by ${esc(d.uploaded_by_name)}</div>` },
       { title: 'Type', cell: d => label(d.doc_type) },
       { title: 'Assets', cell: d => d.asset_ids.length ? d.asset_ids.map(i => esc(names[i] || 'archived asset')).join(', ') : '<span class="muted">General</span>' },
-      { title: 'Status', cell: d => `${badge(d.status)}${d.error ? `<div class="hint" style="color:var(--bad)">${esc(d.error)}</div>` : ''}` },
-      { title: 'Indexed', num: true, cell: d => d.status === 'ready' ? `${d.chunk_count} sections${d.page_count ? ` · ${d.page_count} pages` : ''}` : '—' },
-      { title: '', cell: d => can('documents.manage') ? `<div class="actions">
-          ${['failed', 'ready'].includes(d.status) ? `<button class="btn small" data-action="reprocess" data-id="${esc(d.id)}">Reprocess</button>` : ''}
-          <button class="btn small danger" data-action="delete-doc" data-id="${esc(d.id)}" data-name="${esc(d.filename)}">Delete</button></div>` : '' },
+      ...Object.entries(DOC_PARTS).map(([part, [title, num]]) => ({
+        title, num, cell: d => `<div data-doc="${esc(d.id)}" data-part="${part}">${docPart(part, d)}</div>`,
+      })),
     ], data.items, { empty: 'No documents yet. Upload a machine manual, SOP or parts list (PDF, DOCX, PPTX, XLSX, CSV, TXT).' })}
     ${pager(data, 'docs-page')}`;
   $('#filters').onsubmit = event => { event.preventDefault(); location.hash = '#/documents?' + new URLSearchParams(new FormData(event.target)); };
@@ -803,9 +802,96 @@ pages.documents = async (_, query) => {
       if (await attempt(() => api(`/documents/${el.dataset.id}`, { method: 'DELETE' }), 'Document deleted') !== undefined) route();
     }
   };
-  // While something is still processing, refresh until it settles (quietly: the page must not replay its entrance)
-  if (data.items.some(d => ['queued', 'processing'].includes(d.status))) pollTimer = setTimeout(() => route({ quiet: true }), 2500);
+  watchDocuments(data.items, params.status);
 };
+
+// The parts of a document row that change while it processes, drawn the same way by the page and by watchDocuments
+const DOC_PARTS = { status: ['Status', false], indexed: ['Indexed', true], actions: ['', false] };
+const BUSY = ['queued', 'processing'];
+const docState = d => JSON.stringify([d.status, d.error ?? null, d.progress ?? null, d.chunk_count ?? 0, d.page_count ?? null]);
+
+function docStep(d) {
+  if (d.status === 'queued') return 'Waiting to start';
+  if (d.status !== 'processing') return '';
+  const p = d.progress;
+  if (p?.stage !== 'indexing') return 'Reading the file';
+  return p.done >= p.total ? 'Saving to the search index' : `Indexing ${p.done} of ${p.total} sections`;
+}
+
+function docPart(part, d) {
+  if (part === 'status') {
+    const p = d.progress;
+    const step = docStep(d);
+    const bar = d.status === 'processing' && p?.stage === 'indexing' && p.total
+      ? `<div class="doc-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${p.total}" aria-valuenow="${p.done}"><span style="width:${Math.round(100 * p.done / p.total)}%"></span></div>` : '';
+    return `${badge(d.status)}${step ? `<div class="hint">${esc(step)}</div>${bar}` : ''}${d.error ? `<div class="hint" style="color:var(--bad)">${esc(d.error)}</div>` : ''}`;
+  }
+  if (part === 'indexed') return d.status === 'ready' ? `${d.chunk_count} sections${d.page_count ? ` · ${d.page_count} pages` : ''}` : '—';
+  return can('documents.manage') ? `<div class="actions">
+      ${['failed', 'ready'].includes(d.status) ? `<button class="btn small" data-action="reprocess" data-id="${esc(d.id)}">Reprocess</button>` : ''}
+      <button class="btn small danger" data-action="delete-doc" data-id="${esc(d.id)}" data-name="${esc(d.filename)}">Delete</button></div>` : '';
+}
+
+const POLL_FIRST = 1500;
+const POLL_MAX = 15000;
+let wakeWatch = null;
+document.addEventListener('visibilitychange', () => { if (!document.hidden) wakeWatch?.(); });
+
+/**
+ * While documents of the list process, ask for only their state and update their rows in place: the page is not
+ * drawn again, so scrolling, a selection or an open menu stay as they are. The pause between questions starts
+ * short, grows while nothing changes, and a hidden tab asks nothing until it is shown again. A document that left
+ * the list (deleted, or no longer matching the status filter) draws the list again, quietly.
+ */
+function watchDocuments(rows, statusFilter) {
+  const round = drawCount;
+  const pending = new Map(rows.filter(d => BUSY.includes(d.status)).map(d => [d.id, d]));
+  let delay = POLL_FIRST;
+  const later = () => { clearTimeout(pollTimer); pollTimer = setTimeout(tick, delay); };
+  async function tick() {
+    if (round !== drawCount) return;
+    if (document.hidden) return; // wakeWatch resumes when the tab is shown again
+    let items;
+    try {
+      items = (await api('/documents/status', { params: { ids: [...pending.keys()].join(',') } })).items;
+    } catch {
+      delay = Math.min(delay * 2, POLL_MAX);
+      if (round === drawCount) later();
+      return;
+    }
+    if (round !== drawCount) return;
+    const fresh = new Map(items.map(d => [d.id, d]));
+    let changed = false;
+    let redraw = false;
+    for (const [id, before] of pending) {
+      const now = fresh.get(id);
+      const doc = { ...before, ...now };
+      if (now && !BUSY.includes(doc.status)) {
+        pending.delete(id);
+        toast(doc.status === 'ready' ? `${doc.filename} is ready to search.` : `${doc.filename} could not be processed.`, doc.status !== 'ready');
+      }
+      if (!now || (statusFilter && now.status !== statusFilter)) {
+        redraw = true;
+        continue;
+      }
+      if (docState(doc) !== docState(before)) {
+        changed = true;
+        for (const part of Object.keys(DOC_PARTS)) {
+          const cell = page().querySelector(`[data-doc="${id}"][data-part="${part}"]`);
+          const html = docPart(part, doc);
+          if (cell && cell.innerHTML !== html) cell.innerHTML = html;
+        }
+      }
+      if (BUSY.includes(doc.status)) pending.set(id, doc);
+    }
+    if (redraw) return route({ quiet: true });
+    if (!pending.size) return;
+    delay = changed ? POLL_FIRST : Math.min(Math.round(delay * 1.5), POLL_MAX);
+    later();
+  }
+  wakeWatch = () => { if (round === drawCount && pending.size) { delay = POLL_FIRST; clearTimeout(pollTimer); tick(); } };
+  if (pending.size) later();
+}
 
 function breakdownTable(rows, showAsset = true) {
   return table([
@@ -1231,6 +1317,7 @@ const pageFrame = entry => `<div class="page-head"><h1>${fa(entry[3])}${esc(entr
 
 async function draw({ quiet = false } = {}) {
   clearTimeout(pollTimer);
+  drawCount++;
   // A quiet redraw (a status poll) swaps the content in place, without the entrance animations
   page().classList.toggle('quiet', quiet);
   charts.forEach(c => c.destroy());

@@ -2,6 +2,7 @@
 import logging
 import os
 
+from bson import ObjectId
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 
@@ -70,6 +71,7 @@ def upload_document(
         "supersedes_document_id": None,
         "status": "queued",
         "error": None,
+        "progress": None,
         "chunk_count": 0,
         "page_count": None,
         "parser_version": None,
@@ -101,6 +103,30 @@ def list_documents(
     return paginate(documents, query, page, page_size, [("created_at", -1)])
 
 
+STATUS_FIELDS = ("status", "error", "progress", "chunk_count", "page_count")
+MAX_STATUS_IDS = 200
+
+
+@router.get("/status")
+def document_status(
+    ids: str = Query(..., description="Comma-separated document ids"),
+    user: dict = Depends(require_permission("documents.view")),
+):
+    """Only the processing state of the named documents: what the library polls while files process.
+
+    Cheap to ask often: one indexed lookup, a few fields per document. Ids that are malformed or
+    belong to another organization are simply absent from the answer.
+    """
+    wanted = [i for i in dict.fromkeys(s.strip() for s in ids.split(",")) if i]
+    if len(wanted) > MAX_STATUS_IDS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Ask for at most {MAX_STATUS_IDS} documents at once.")
+    object_ids = [ObjectId(i) for i in wanted if ObjectId.is_valid(i)]
+    found = documents.find(
+        {"_id": {"$in": object_ids}, "organization_id": user["organization_id"]}, dict.fromkeys(STATUS_FIELDS, 1)
+    )
+    return {"items": [{"id": str(d["_id"]), **{k: d.get(k) for k in STATUS_FIELDS}} for d in found]}
+
+
 @router.get("/{document_id}")
 def view_document(document_id: str, user: dict = Depends(require_permission("documents.view"))):
     return clean(get_document(user["organization_id"], document_id))
@@ -127,7 +153,7 @@ def reprocess_document(
     doc = get_document(user["organization_id"], document_id)
     if doc["status"] in ("queued", "processing"):
         raise HTTPException(status.HTTP_409_CONFLICT, "This document is already being processed.")
-    documents.update_one({"_id": doc["_id"]}, {"$set": {"status": "queued", "error": None}})
+    documents.update_one({"_id": doc["_id"]}, {"$set": {"status": "queued", "error": None, "progress": None}})
     background.add_task(ingestion.process_document, doc["_id"])
     audit_service.record(user, "document.reprocess", "document", document_id, detail=doc["filename"])
     return clean(documents.find_one({"_id": doc["_id"]}))
